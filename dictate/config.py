@@ -8,6 +8,7 @@ from typing import Any
 
 CONFIG_PATH = Path("~/.config/dictate/config.toml").expanduser()
 DEFAULT_MODEL = "mlx-community/whisper-large-v3-turbo"
+DEFAULT_PARAKEET_MODEL = "mlx-community/parakeet-tdt-0.6b-v2"
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,7 @@ class AppConfig:
     hotkey: str = "right_option"
     mode: str = "hold"
     model: str = DEFAULT_MODEL
+    parakeet_model: str = DEFAULT_PARAKEET_MODEL
     language: str = "en"
     sounds: bool = True
     paste_mode: str = "clipboard"
@@ -99,6 +101,7 @@ def as_toml_example(config: AppConfig | None = None) -> str:
         "hotkey": config.hotkey,
         "mode": config.mode,
         "model": config.model,
+        "parakeet_model": config.parakeet_model,
         "language": config.language,
         "sounds": config.sounds,
         "paste_mode": config.paste_mode,

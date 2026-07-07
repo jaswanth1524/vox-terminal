@@ -22,6 +22,9 @@ def configure_offline_mode(*, offline: bool = True) -> None:
         os.environ["HF_HUB_OFFLINE"] = "1"
         os.environ["TRANSFORMERS_OFFLINE"] = "1"
         os.environ["HF_DATASETS_OFFLINE"] = "1"
+    else:
+        for key in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_DATASETS_OFFLINE"):
+            os.environ.pop(key, None)
 
 
 def _default_transcribe_impl(audio: str | np.ndarray, **kwargs: Any) -> Mapping[str, Any]:
@@ -75,8 +78,6 @@ class Transcriber:
 
 
 def download_model(model: str = DEFAULT_MODEL, language: str = "en") -> None:
-    for key in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_DATASETS_OFFLINE"):
-        os.environ.pop(key, None)
     transcriber = Transcriber(model=model, language=language, offline=False)
     transcriber.load()
 

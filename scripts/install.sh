@@ -35,8 +35,17 @@ print(load_config().language)
 PY
 )"
 
+PARAKEET_MODEL="$(uv run python - <<'PY'
+from dictate.config import load_config
+print(load_config().parakeet_model)
+PY
+)"
+
 echo "Downloading and warming model: $MODEL"
 uv run python -m dictate.transcriber --download-model --model "$MODEL" --language "$LANGUAGE"
+
+echo "Downloading and warming Parakeet benchmark model: $PARAKEET_MODEL"
+uv run python -m dictate.benchmark --download-parakeet --parakeet-model "$PARAKEET_MODEL"
 
 echo "Running permission diagnostics..."
 if ! uv run python -m dictate.doctor; then
@@ -49,4 +58,5 @@ echo "Install complete."
 echo "Run Phase 0: uv run python scripts/phase0_spike.py"
 echo "Run Vox Terminal menu bar: uv run python -m dictate"
 echo "Run foreground debug mode: uv run python -m dictate --no-menubar"
+echo "Run ASR benchmark: uv run python scripts/benchmark_parakeet.py --audio tests/fixtures/hello_world.wav"
 echo "Start at Login can be toggled from the Vox Terminal menu bar item."

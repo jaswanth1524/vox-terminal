@@ -2,7 +2,7 @@
 
 Vox Terminal is a local macOS push-to-talk dictation tool. Hold Right Option anywhere, speak, release, and the transcript is pasted into the currently focused app. Audio stays on the machine. Runtime transcription is configured for offline mode; the Whisper model is downloaded only during installation.
 
-Phase 0 through Phase 4 are implemented here. Parakeet benchmarking is intentionally left for the next phase.
+Phase 0 through Phase 5 are implemented here.
 
 ## Requirements
 
@@ -72,6 +72,7 @@ Create `~/.config/dictate/config.toml` to override defaults:
 hotkey = "right_option"
 mode = "hold"
 model = "mlx-community/whisper-large-v3-turbo"
+parakeet_model = "mlx-community/parakeet-tdt-0.6b-v2"
 language = "en"
 sounds = true
 paste_mode = "clipboard"
@@ -93,6 +94,16 @@ Recordings shorter than `min_recording_ms` are ignored. Recordings are capped at
 `custom_vocabulary` is appended to Whisper's `initial_prompt` as vocabulary hints. This improves recognition of project-specific terms without sending audio or prompts off-machine.
 
 When `mode = "toggle"` and `vad_auto_stop = true`, Silero VAD watches the in-memory recording and stops automatically after speech is followed by `vad_silence_seconds` of silence.
+
+## Benchmarking
+
+Compare cached Whisper and Parakeet models on a local audio file:
+
+```sh
+uv run python scripts/benchmark_parakeet.py --audio tests/fixtures/hello_world.wav
+```
+
+Benchmarks run offline by default and fail if the configured models are not already cached. Use `./scripts/install.sh` once while online to pre-download the default Whisper and Parakeet models, or pass `--online` to the benchmark when intentionally allowing a model download.
 
 ## Testing
 

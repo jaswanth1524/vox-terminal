@@ -36,6 +36,7 @@ class ConfigTests(unittest.TestCase):
         example = as_toml_example(AppConfig())
         self.assertIn('mode = "hold"', example)
         self.assertIn('paste_mode = "clipboard"', example)
+        self.assertIn('parakeet_model = "mlx-community/parakeet-tdt-0.6b-v2"', example)
         self.assertIn("max_recording_seconds = 120", example)
         self.assertIn("history_size = 20", example)
         self.assertIn("vad_auto_stop = true", example)
