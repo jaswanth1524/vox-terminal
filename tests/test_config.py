@@ -37,6 +37,36 @@ class ConfigTests(unittest.TestCase):
         self.assertIn('mode = "hold"', example)
         self.assertIn('paste_mode = "clipboard"', example)
         self.assertIn("max_recording_seconds = 120", example)
+        self.assertIn("history_size = 20", example)
+
+    def test_builds_whisper_prompt_from_initial_prompt_and_vocabulary(self) -> None:
+        config = AppConfig(
+            initial_prompt="Use terminal words.",
+            custom_vocabulary=("Claude Code", "kubectl"),
+        )
+
+        self.assertEqual(
+            config.whisper_initial_prompt,
+            "Use terminal words. Vocabulary hints: Claude Code, kubectl.",
+        )
+
+    def test_loads_custom_vocabulary_from_toml(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.toml"
+            path.write_text(
+                'custom_vocabulary = ["Claude Code", "FastAPI"]',
+                encoding="utf-8",
+            )
+            config = load_config(path)
+
+        self.assertEqual(config.custom_vocabulary, ("Claude Code", "FastAPI"))
+
+    def test_rejects_non_list_custom_vocabulary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.toml"
+            path.write_text('custom_vocabulary = "Claude Code"', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "custom_vocabulary"):
+                load_config(path)
 
 
 if __name__ == "__main__":

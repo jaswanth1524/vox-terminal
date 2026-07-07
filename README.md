@@ -2,7 +2,7 @@
 
 Vox Terminal is a local macOS push-to-talk dictation tool. Hold Right Option anywhere, speak, release, and the transcript is pasted into the currently focused app. Audio stays on the machine. Runtime transcription is configured for offline mode; the Whisper model is downloaded only during installation.
 
-Phase 0, Phase 1, and Phase 2 are implemented here. VAD auto-stop, Parakeet benchmarking, custom vocabulary tuning, and transcription history are intentionally left for a later phase.
+Phase 0, Phase 1, Phase 2, and dependency-free Phase 3 features are implemented here. VAD auto-stop and Parakeet benchmarking require additional dependencies and are intentionally left for a later phase.
 
 ## Requirements
 
@@ -62,6 +62,8 @@ The menu bar icon shows the current state:
 
 Use the menu's Start at Login item to install or remove `~/Library/LaunchAgents/com.user.dictate.plist`.
 
+The History menu item shows recent pasted transcripts for the current process only. History is kept in memory, capped by `history_size`, and cleared when Vox Terminal quits or when you choose Clear History.
+
 ## Configuration
 
 Create `~/.config/dictate/config.toml` to override defaults:
@@ -76,11 +78,15 @@ paste_mode = "clipboard"
 restore_clipboard = true
 min_recording_ms = 300
 max_recording_seconds = 120
+history_size = 20
+custom_vocabulary = ["Claude Code", "Codex", "kubectl", "FastAPI"]
 ```
 
 `paste_mode = "clipboard"` is the reliable default. `paste_mode = "keystroke"` is available as a fallback, but it can mangle Unicode or fast input in some terminals.
 
 Recordings shorter than `min_recording_ms` are ignored. Recordings are capped at `max_recording_seconds`.
+
+`custom_vocabulary` is appended to Whisper's `initial_prompt` as vocabulary hints. This improves recognition of project-specific terms without sending audio or prompts off-machine.
 
 ## Testing
 

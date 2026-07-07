@@ -7,6 +7,7 @@ import numpy as np
 
 from dictate.__main__ import DictateService
 from dictate.config import AppConfig
+from dictate.history import TranscriptHistory
 from dictate.recorder import Recording
 
 
@@ -119,6 +120,28 @@ class ServiceTests(unittest.TestCase):
         service._on_max_recording_time()
 
         self.assertEqual(recorder.stops, 1)
+
+    def test_successful_transcript_is_added_to_history(self) -> None:
+        history = TranscriptHistory(max_size=5)
+        injector = FakeInjector()
+        service = DictateService(
+            AppConfig(sounds=False),
+            transcriber=FakeTranscriber(),  # type: ignore[arg-type]
+            injector=injector,
+            history=history,
+        )
+        now = time.monotonic()
+        recording = Recording(
+            audio=np.ones(160, dtype=np.float32),
+            sample_rate=16_000,
+            started_at=now - 1,
+            stopped_at=now,
+        )
+
+        service._transcribe_and_inject(recording)
+
+        self.assertEqual(injector.injected, ["hello"])
+        self.assertEqual([entry.text for entry in history.entries()], ["hello"])
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ import time
 from typing import Callable
 
 from .config import AppConfig, load_config
+from .history import TranscriptHistory
 from .hotkey import HotkeyCallbacks, RightOptionHoldListener
 from .injector import InjectionError, TextInjector, build_injector
 from .postprocess import clean_transcript
@@ -60,19 +61,21 @@ class DictateService:
         recorder: Recorder | None = None,
         transcriber: Transcriber | None = None,
         injector: TextInjector | None = None,
+        history: TranscriptHistory | None = None,
     ) -> None:
         self.config = config
         self.recorder = recorder or Recorder(max_seconds=config.max_recording_seconds)
         self.transcriber = transcriber or Transcriber(
             model=config.model,
             language=config.language,
-            initial_prompt=config.initial_prompt,
+            initial_prompt=config.whisper_initial_prompt,
             offline=True,
         )
         self.injector = injector or build_injector(
             paste_mode=config.paste_mode,
             restore_clipboard=config.restore_clipboard,
         )
+        self.history = history or TranscriptHistory(config.history_size)
         self._status_callback = status_callback
         self._status = "stopped"
         self._recording_lock = threading.Lock()
@@ -145,6 +148,12 @@ class DictateService:
             if self.recorder.is_recording:
                 self.recorder.stop()
         self._set_status("stopped")
+
+    def history_text(self) -> str:
+        return self.history.render()
+
+    def clear_history(self) -> None:
+        self.history.clear()
 
     def _install_signal_handlers(self) -> None:
         def handle_signal(signum: int, frame: object) -> None:
@@ -252,6 +261,7 @@ class DictateService:
                 logging.info("No speech detected; nothing pasted.")
                 return
             self.injector.inject(cleaned)
+            self.history.add(cleaned)
             logging.info("Pasted transcript (%d chars).", len(cleaned))
         except InjectionError as exc:
             logging.error("%s", exc)

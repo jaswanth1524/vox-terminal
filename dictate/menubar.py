@@ -33,9 +33,22 @@ class DictateMenuBar(rumps.App):
         self._status = "loading"
         self._status_lock = threading.Lock()
         self.status_item = rumps.MenuItem("Status: Loading model")
+        self.history_item = rumps.MenuItem("History", callback=self._show_history)
+        self.clear_history_item = rumps.MenuItem(
+            "Clear History",
+            callback=self._clear_history,
+        )
         self.login_item = rumps.MenuItem("Start at Login", callback=self._toggle_login)
         self.quit_item = rumps.MenuItem("Quit", callback=self._quit)
-        self.menu = [self.status_item, None, self.login_item, self.quit_item]
+        self.menu = [
+            self.status_item,
+            None,
+            self.history_item,
+            self.clear_history_item,
+            None,
+            self.login_item,
+            self.quit_item,
+        ]
         self._refresh_login_item()
         self._timer = rumps.Timer(self._refresh_status, 0.25)
         self._timer.start()
@@ -78,6 +91,21 @@ class DictateMenuBar(rumps.App):
                 title="Vox Terminal",
                 message=f"Could not update Start at Login: {exc}",
             )
+
+    def _show_history(self, _sender: rumps.MenuItem) -> None:
+        text = "No transcript history yet."
+        if hasattr(self.service, "history_text"):
+            text = self.service.history_text()
+        rumps.alert(title="Vox Terminal History", message=text)
+
+    def _clear_history(self, _sender: rumps.MenuItem) -> None:
+        if hasattr(self.service, "clear_history"):
+            self.service.clear_history()
+        rumps.notification(
+            title="Vox Terminal",
+            subtitle="History cleared",
+            message="Transcript history was cleared.",
+        )
 
     def _quit(self, _sender: rumps.MenuItem) -> None:
         if hasattr(self.service, "stop"):

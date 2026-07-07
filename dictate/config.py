@@ -23,6 +23,19 @@ class AppConfig:
     max_recording_seconds: int = 120
     silence_rms_threshold: float = 0.002
     initial_prompt: str | None = None
+    custom_vocabulary: tuple[str, ...] = ()
+    history_size: int = 20
+
+    @property
+    def whisper_initial_prompt(self) -> str | None:
+        parts: list[str] = []
+        if self.initial_prompt:
+            parts.append(self.initial_prompt.strip())
+        if self.custom_vocabulary:
+            terms = ", ".join(self.custom_vocabulary)
+            parts.append(f"Vocabulary hints: {terms}.")
+        prompt = " ".join(part for part in parts if part)
+        return prompt or None
 
 
 def load_config(path: Path = CONFIG_PATH) -> AppConfig:
@@ -37,6 +50,12 @@ def load_config(path: Path = CONFIG_PATH) -> AppConfig:
     if unknown:
         joined = ", ".join(unknown)
         raise ValueError(f"Unknown config key(s) in {path}: {joined}")
+
+    if "custom_vocabulary" in raw and isinstance(raw["custom_vocabulary"], list):
+        raw["custom_vocabulary"] = tuple(
+            term.strip() if isinstance(term, str) else term
+            for term in raw["custom_vocabulary"]
+        )
 
     config = AppConfig(**raw)
     _validate(config, path)
@@ -56,6 +75,12 @@ def _validate(config: AppConfig, path: Path) -> None:
         raise ValueError(f"{path}: max_recording_seconds must be positive")
     if config.silence_rms_threshold < 0:
         raise ValueError(f"{path}: silence_rms_threshold must be non-negative")
+    if not isinstance(config.custom_vocabulary, tuple):
+        raise ValueError(f"{path}: custom_vocabulary must be a list of strings")
+    if not all(isinstance(term, str) and term.strip() for term in config.custom_vocabulary):
+        raise ValueError(f"{path}: custom_vocabulary must contain only non-empty strings")
+    if config.history_size < 0:
+        raise ValueError(f"{path}: history_size must be non-negative")
 
 
 def as_toml_example(config: AppConfig | None = None) -> str:
@@ -70,6 +95,7 @@ def as_toml_example(config: AppConfig | None = None) -> str:
         "restore_clipboard": config.restore_clipboard,
         "min_recording_ms": config.min_recording_ms,
         "max_recording_seconds": config.max_recording_seconds,
+        "history_size": config.history_size,
     }
     lines = []
     for key, value in values.items():
@@ -80,4 +106,7 @@ def as_toml_example(config: AppConfig | None = None) -> str:
         else:
             rendered = f'"{value}"'
         lines.append(f"{key} = {rendered}")
+    if config.custom_vocabulary:
+        quoted = ", ".join(f'"{term}"' for term in config.custom_vocabulary)
+        lines.append(f"custom_vocabulary = [{quoted}]")
     return "\n".join(lines) + "\n"

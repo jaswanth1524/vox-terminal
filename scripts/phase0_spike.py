@@ -20,7 +20,7 @@ def main() -> int:
     transcriber = Transcriber(
         model=config.model,
         language=config.language,
-        initial_prompt=config.initial_prompt,
+        initial_prompt=config.whisper_initial_prompt,
         offline=True,
     )
     try:
