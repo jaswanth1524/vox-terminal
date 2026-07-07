@@ -1,7 +1,7 @@
 [project]
-name = "dictate"
+name = "vox-terminal"
 version = "0.1.0"
-description = "Local macOS push-to-talk dictation"
+description = "Local macOS push-to-talk dictation for terminals and apps"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

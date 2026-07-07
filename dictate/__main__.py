@@ -119,7 +119,7 @@ class DictateService:
             return False
 
         self._set_status("idle")
-        logging.info("Dictate is ready. Hotkey mode: %s.", self.config.mode)
+        logging.info("Vox Terminal is ready. Hotkey mode: %s.", self.config.mode)
         return True
 
     def run_forever(self) -> int:

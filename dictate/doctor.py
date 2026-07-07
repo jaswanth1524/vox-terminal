@@ -34,10 +34,10 @@ def print_permission_instructions() -> None:
     print("2. System Settings -> Privacy & Security -> Accessibility")
     print("3. System Settings -> Privacy & Security -> Input Monitoring")
     print()
-    print("Grant these to the binary or app that launches Dictate.")
+    print("Grant these to the binary or app that launches Vox Terminal.")
     print(f"Current Python binary: {sys.executable}")
     print("If launched from a terminal, also grant the terminal app itself.")
-    print("Input Monitoring cannot be verified noninteractively; Dictate warns at startup")
+    print("Input Monitoring cannot be verified noninteractively; Vox Terminal warns at startup")
     print("if the global keyboard listener receives no events.")
 
 

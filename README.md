@@ -1,6 +1,6 @@
-# Dictate
+# Vox Terminal
 
-Dictate is a local macOS push-to-talk dictation tool. Hold Right Option anywhere, speak, release, and the transcript is pasted into the currently focused app. Audio stays on the machine. Runtime transcription is configured for offline mode; the Whisper model is downloaded only during installation.
+Vox Terminal is a local macOS push-to-talk dictation tool. Hold Right Option anywhere, speak, release, and the transcript is pasted into the currently focused app. Audio stays on the machine. Runtime transcription is configured for offline mode; the Whisper model is downloaded only during installation.
 
 Phase 0, Phase 1, and Phase 2 are implemented here. VAD auto-stop, Parakeet benchmarking, custom vocabulary tuning, and transcription history are intentionally left for a later phase.
 
@@ -29,7 +29,7 @@ Open System Settings -> Privacy & Security and grant:
 2. Accessibility: required to synthesize Cmd+V.
 3. Input Monitoring: required for the global Right Option hotkey.
 
-If the hotkey listener sees no keyboard events shortly after startup, Dictate prints an Input Monitoring warning. Secure input fields, such as password prompts, may block synthetic paste events.
+If the hotkey listener sees no keyboard events shortly after startup, Vox Terminal prints an Input Monitoring warning. Secure input fields, such as password prompts, may block synthetic paste events.
 
 ## Usage
 
@@ -98,4 +98,4 @@ DICTATE_RUN_MLX_TESTS=1 uv run python -m unittest tests.test_transcriber
 
 ## Privacy Notes
 
-Dictate sets Hugging Face offline environment variables during normal runtime. If the model is missing from `~/.cache/huggingface`, runtime startup fails with installation instructions instead of attempting a network download. Audio is held in memory as NumPy arrays; Dictate does not write utterances to disk.
+Vox Terminal sets Hugging Face offline environment variables during normal runtime. If the model is missing from `~/.cache/huggingface`, runtime startup fails with installation instructions instead of attempting a network download. Audio is held in memory as NumPy arrays; Vox Terminal does not write utterances to disk.

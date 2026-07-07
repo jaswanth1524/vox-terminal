@@ -75,7 +75,7 @@ class DictateMenuBar(rumps.App):
             self._refresh_login_item()
         except Exception as exc:
             rumps.alert(
-                title="Dictate",
+                title="Vox Terminal",
                 message=f"Could not update Start at Login: {exc}",
             )
 

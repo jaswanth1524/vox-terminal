@@ -41,12 +41,12 @@ uv run python -m dictate.transcriber --download-model --model "$MODEL" --languag
 echo "Running permission diagnostics..."
 if ! uv run python -m dictate.doctor; then
   echo
-  echo "One or more permissions are missing. Grant them in System Settings, then run Dictate again."
+  echo "One or more permissions are missing. Grant them in System Settings, then run Vox Terminal again."
 fi
 
 echo
 echo "Install complete."
 echo "Run Phase 0: uv run python scripts/phase0_spike.py"
-echo "Run Dictate menu bar: uv run python -m dictate"
+echo "Run Vox Terminal menu bar: uv run python -m dictate"
 echo "Run foreground debug mode: uv run python -m dictate --no-menubar"
-echo "Start at Login can be toggled from the Dictate menu bar item."
+echo "Start at Login can be toggled from the Vox Terminal menu bar item."

@@ -1,1 +1,1 @@
-"""Test package for Dictate."""
+"""Test package for Vox Terminal."""

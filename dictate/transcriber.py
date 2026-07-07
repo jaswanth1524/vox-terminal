@@ -82,7 +82,7 @@ def download_model(model: str = DEFAULT_MODEL, language: str = "en") -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Dictate transcriber utilities")
+    parser = argparse.ArgumentParser(description="Vox Terminal transcriber utilities")
     parser.add_argument("--download-model", action="store_true")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--language", default="en")
