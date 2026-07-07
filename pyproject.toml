@@ -1,0 +1,17 @@
+[project]
+name = "dictate"
+version = "0.1.0"
+description = "Local macOS push-to-talk dictation"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mlx-whisper",
+    "numpy",
+    "pynput",
+    "pyobjc-framework-Quartz",
+    "rumps",
+    "sounddevice",
+]
+
+[tool.uv]
+package = false
