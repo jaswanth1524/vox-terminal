@@ -111,6 +111,20 @@ class Recorder:
             stopped_at=stopped_at,
         )
 
+    def snapshot(self) -> Recording:
+        with self._lock:
+            if self._frames:
+                audio = np.concatenate(self._frames).astype(np.float32, copy=False)
+            else:
+                audio = np.empty(0, dtype=np.float32)
+            started_at = self._started_at
+        return Recording(
+            audio=audio.reshape(-1),
+            sample_rate=self.sample_rate,
+            started_at=started_at,
+            stopped_at=time.monotonic(),
+        )
+
     def _callback(
         self,
         indata: np.ndarray,

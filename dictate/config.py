@@ -25,6 +25,10 @@ class AppConfig:
     initial_prompt: str | None = None
     custom_vocabulary: tuple[str, ...] = ()
     history_size: int = 20
+    vad_auto_stop: bool = True
+    vad_silence_seconds: float = 1.0
+    vad_min_speech_seconds: float = 0.25
+    vad_poll_seconds: float = 0.25
 
     @property
     def whisper_initial_prompt(self) -> str | None:
@@ -81,6 +85,12 @@ def _validate(config: AppConfig, path: Path) -> None:
         raise ValueError(f"{path}: custom_vocabulary must contain only non-empty strings")
     if config.history_size < 0:
         raise ValueError(f"{path}: history_size must be non-negative")
+    if config.vad_silence_seconds <= 0:
+        raise ValueError(f"{path}: vad_silence_seconds must be positive")
+    if config.vad_min_speech_seconds < 0:
+        raise ValueError(f"{path}: vad_min_speech_seconds must be non-negative")
+    if config.vad_poll_seconds <= 0:
+        raise ValueError(f"{path}: vad_poll_seconds must be positive")
 
 
 def as_toml_example(config: AppConfig | None = None) -> str:
@@ -96,6 +106,10 @@ def as_toml_example(config: AppConfig | None = None) -> str:
         "min_recording_ms": config.min_recording_ms,
         "max_recording_seconds": config.max_recording_seconds,
         "history_size": config.history_size,
+        "vad_auto_stop": config.vad_auto_stop,
+        "vad_silence_seconds": config.vad_silence_seconds,
+        "vad_min_speech_seconds": config.vad_min_speech_seconds,
+        "vad_poll_seconds": config.vad_poll_seconds,
     }
     lines = []
     for key, value in values.items():

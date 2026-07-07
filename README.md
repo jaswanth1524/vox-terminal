@@ -2,7 +2,7 @@
 
 Vox Terminal is a local macOS push-to-talk dictation tool. Hold Right Option anywhere, speak, release, and the transcript is pasted into the currently focused app. Audio stays on the machine. Runtime transcription is configured for offline mode; the Whisper model is downloaded only during installation.
 
-Phase 0, Phase 1, Phase 2, and dependency-free Phase 3 features are implemented here. VAD auto-stop and Parakeet benchmarking require additional dependencies and are intentionally left for a later phase.
+Phase 0 through Phase 4 are implemented here. Parakeet benchmarking is intentionally left for the next phase.
 
 ## Requirements
 
@@ -80,6 +80,10 @@ min_recording_ms = 300
 max_recording_seconds = 120
 history_size = 20
 custom_vocabulary = ["Claude Code", "Codex", "kubectl", "FastAPI"]
+vad_auto_stop = true
+vad_silence_seconds = 1.0
+vad_min_speech_seconds = 0.25
+vad_poll_seconds = 0.25
 ```
 
 `paste_mode = "clipboard"` is the reliable default. `paste_mode = "keystroke"` is available as a fallback, but it can mangle Unicode or fast input in some terminals.
@@ -87,6 +91,8 @@ custom_vocabulary = ["Claude Code", "Codex", "kubectl", "FastAPI"]
 Recordings shorter than `min_recording_ms` are ignored. Recordings are capped at `max_recording_seconds`.
 
 `custom_vocabulary` is appended to Whisper's `initial_prompt` as vocabulary hints. This improves recognition of project-specific terms without sending audio or prompts off-machine.
+
+When `mode = "toggle"` and `vad_auto_stop = true`, Silero VAD watches the in-memory recording and stops automatically after speech is followed by `vad_silence_seconds` of silence.
 
 ## Testing
 

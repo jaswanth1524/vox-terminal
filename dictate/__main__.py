@@ -15,6 +15,7 @@ from .injector import InjectionError, TextInjector, build_injector
 from .postprocess import clean_transcript
 from .recorder import AudioCaptureError, Recorder, Recording
 from .transcriber import ModelUnavailableError, Transcriber
+from .vad import SileroVadAutoStop
 
 
 START_SOUND = "/System/Library/Sounds/Tink.aiff"
@@ -62,6 +63,7 @@ class DictateService:
         transcriber: Transcriber | None = None,
         injector: TextInjector | None = None,
         history: TranscriptHistory | None = None,
+        vad_auto_stop: SileroVadAutoStop | None = None,
     ) -> None:
         self.config = config
         self.recorder = recorder or Recorder(max_seconds=config.max_recording_seconds)
@@ -76,6 +78,10 @@ class DictateService:
             restore_clipboard=config.restore_clipboard,
         )
         self.history = history or TranscriptHistory(config.history_size)
+        self.vad_auto_stop = vad_auto_stop or SileroVadAutoStop(
+            silence_seconds=config.vad_silence_seconds,
+            min_speech_seconds=config.vad_min_speech_seconds,
+        )
         self._status_callback = status_callback
         self._status = "stopped"
         self._recording_lock = threading.Lock()
@@ -83,6 +89,8 @@ class DictateService:
         self._shutdown = threading.Event()
         self._listener: RightOptionHoldListener | None = None
         self._max_timer: threading.Timer | None = None
+        self._vad_stop_event = threading.Event()
+        self._vad_thread: threading.Thread | None = None
 
     @property
     def status(self) -> str:
@@ -141,6 +149,7 @@ class DictateService:
     def stop(self) -> None:
         self._shutdown.set()
         self._cancel_max_timer()
+        self._stop_vad_monitor()
         if self._listener is not None:
             self._listener.stop()
             self._listener = None
@@ -191,6 +200,7 @@ class DictateService:
                 self._set_status("error")
                 return
             self._start_max_timer()
+            self._start_vad_monitor()
 
         self._set_status("recording")
         self._play_sound(START_SOUND)
@@ -208,6 +218,7 @@ class DictateService:
                 return
             finally:
                 self._cancel_max_timer()
+                self._stop_vad_monitor()
 
         self._play_sound(STOP_SOUND)
         logging.info("Stopped recording: %s.", reason)
@@ -242,6 +253,46 @@ class DictateService:
     def _on_max_recording_time(self) -> None:
         logging.info("Recording reached %ss cap.", self.config.max_recording_seconds)
         self._finish_recording("maximum duration")
+
+    def _start_vad_monitor(self) -> None:
+        self._stop_vad_monitor()
+        if self.config.mode != "toggle" or not self.config.vad_auto_stop:
+            return
+        self._vad_stop_event.clear()
+        self._vad_thread = threading.Thread(target=self._vad_monitor_loop, daemon=True)
+        self._vad_thread.start()
+
+    def _stop_vad_monitor(self) -> None:
+        self._vad_stop_event.set()
+        if (
+            self._vad_thread is not None
+            and self._vad_thread.is_alive()
+            and threading.current_thread() is not self._vad_thread
+        ):
+            self._vad_thread.join(timeout=1.0)
+        self._vad_thread = None
+
+    def _vad_monitor_loop(self) -> None:
+        logging.info("VAD auto-stop monitor started.")
+        while not self._vad_stop_event.wait(self.config.vad_poll_seconds):
+            if not self.recorder.is_recording:
+                return
+            try:
+                recording = self.recorder.snapshot()
+                decision = self.vad_auto_stop.decide(
+                    recording.audio,
+                    sample_rate=recording.sample_rate,
+                )
+            except Exception as exc:
+                logging.warning("VAD auto-stop failed; continuing recording: %s", exc)
+                return
+            if decision.should_stop:
+                logging.info(
+                    "VAD auto-stop after %.2fs trailing silence.",
+                    decision.trailing_silence_seconds,
+                )
+                self._finish_recording("VAD auto-stop")
+                return
 
     def _transcribe_and_inject(self, recording: Recording) -> None:
         if not self._transcribing.acquire(blocking=False):

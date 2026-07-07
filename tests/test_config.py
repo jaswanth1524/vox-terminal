@@ -38,6 +38,8 @@ class ConfigTests(unittest.TestCase):
         self.assertIn('paste_mode = "clipboard"', example)
         self.assertIn("max_recording_seconds = 120", example)
         self.assertIn("history_size = 20", example)
+        self.assertIn("vad_auto_stop = true", example)
+        self.assertIn("vad_silence_seconds = 1.0", example)
 
     def test_builds_whisper_prompt_from_initial_prompt_and_vocabulary(self) -> None:
         config = AppConfig(
@@ -66,6 +68,13 @@ class ConfigTests(unittest.TestCase):
             path = Path(tmp) / "config.toml"
             path.write_text('custom_vocabulary = "Claude Code"', encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "custom_vocabulary"):
+                load_config(path)
+
+    def test_rejects_invalid_vad_timings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.toml"
+            path.write_text("vad_silence_seconds = 0", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "vad_silence_seconds"):
                 load_config(path)
 
 

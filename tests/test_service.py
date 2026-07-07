@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
 import unittest
 
 import numpy as np
@@ -33,6 +34,15 @@ class FakeRecorder:
             stopped_at=now,
         )
 
+    def snapshot(self) -> Recording:
+        now = time.monotonic()
+        return Recording(
+            audio=np.ones(16_000, dtype=np.float32),
+            sample_rate=16_000,
+            started_at=now - 1,
+            stopped_at=now,
+        )
+
 
 class FakeTranscriber:
     def __init__(self) -> None:
@@ -54,6 +64,20 @@ class FakeInjector:
 
     def inject(self, text: str) -> None:
         self.injected.append(text)
+
+
+class FakeVadAutoStop:
+    def __init__(self, should_stop: bool = True) -> None:
+        self.should_stop = should_stop
+        self.calls = 0
+
+    def decide(self, audio: np.ndarray, *, sample_rate: int) -> object:
+        del audio, sample_rate
+        self.calls += 1
+        return SimpleNamespace(
+            should_stop=self.should_stop,
+            trailing_silence_seconds=1.0,
+        )
 
 
 class ServiceTests(unittest.TestCase):
@@ -142,6 +166,31 @@ class ServiceTests(unittest.TestCase):
 
         self.assertEqual(injector.injected, ["hello"])
         self.assertEqual([entry.text for entry in history.entries()], ["hello"])
+
+    def test_vad_auto_stop_stops_toggle_recording(self) -> None:
+        recorder = FakeRecorder(duration=2.0)
+        fake_vad = FakeVadAutoStop()
+        service = DictateService(
+            AppConfig(
+                mode="toggle",
+                sounds=False,
+                min_recording_ms=1_000,
+                vad_poll_seconds=0.01,
+            ),
+            recorder=recorder,  # type: ignore[arg-type]
+            transcriber=FakeTranscriber(),  # type: ignore[arg-type]
+            injector=FakeInjector(),
+            vad_auto_stop=fake_vad,  # type: ignore[arg-type]
+        )
+
+        service._on_hotkey_press()
+        deadline = time.monotonic() + 1
+        while recorder.stops == 0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        service._stop_vad_monitor()
+
+        self.assertEqual(recorder.stops, 1)
+        self.assertGreaterEqual(fake_vad.calls, 1)
 
 
 if __name__ == "__main__":
