@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import unittest
 from pathlib import Path
 from types import SimpleNamespace
-import unittest
 
 from dictate.benchmark import benchmark_parakeet, benchmark_whisper
 

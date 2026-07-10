@@ -6,7 +6,7 @@ import signal
 import subprocess
 import threading
 import time
-from typing import Callable
+from collections.abc import Callable
 
 from .config import AppConfig, load_config
 from .history import TranscriptHistory
@@ -16,7 +16,6 @@ from .postprocess import clean_transcript
 from .recorder import AudioCaptureError, Recorder, Recording
 from .transcriber import ModelUnavailableError, Transcriber
 from .vad import SileroVadAutoStop
-
 
 START_SOUND = "/System/Library/Sounds/Tink.aiff"
 STOP_SOUND = "/System/Library/Sounds/Pop.aiff"
@@ -30,12 +29,38 @@ def main() -> int:
         action="store_true",
         help="run as a foreground CLI service without the rumps menu bar",
     )
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="run local dependency and macOS permission diagnostics",
+    )
+    parser.add_argument(
+        "--download-model",
+        action="store_true",
+        help="explicitly download and warm the configured model",
+    )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
+    if args.self_test:
+        from . import menubar, settings
+
+        del menubar, settings
+        print("Vox Terminal app bundle self-test: OK")
+        return 0
+
+    from .logging_config import configure_logging
+
+    configure_logging(foreground=args.no_menubar or args.doctor)
+
+    if args.doctor:
+        from .doctor import main as doctor_main
+
+        return doctor_main()
 
     try:
         config = load_config()
@@ -43,13 +68,26 @@ def main() -> int:
         logging.error("Configuration error: %s", exc)
         return 2
 
-    service = DictateService(config)
+    if args.download_model:
+        from .model_manager import ModelManager
+
+        ModelManager(config.model, config.language).download()
+        print("Model is available in the local cache.")
+        return 0
+
     if args.no_menubar:
+        service = DictateService(config)
         return service.run_forever()
 
+    from .controller import AppController
     from .menubar import DictateMenuBar
 
-    DictateMenuBar(service).run()
+    try:
+        controller = AppController()
+    except Exception as exc:
+        logging.error("Configuration error: %s", exc)
+        return 2
+    DictateMenuBar(controller).run()
     return 0
 
 
@@ -91,6 +129,7 @@ class DictateService:
         self._max_timer: threading.Timer | None = None
         self._vad_stop_event = threading.Event()
         self._vad_thread: threading.Thread | None = None
+        self.last_error: str | None = None
 
     @property
     def status(self) -> str:
@@ -102,16 +141,19 @@ class DictateService:
             callback(self._status)
 
     def start(self) -> bool:
+        self.last_error = None
         self._set_status("loading")
         try:
             logging.info("Loading model once at startup: %s", self.config.model)
             self.transcriber.load()
         except ModelUnavailableError as exc:
             logging.error("%s", exc)
+            self.last_error = str(exc)
             self._set_status("error")
             return False
         except Exception as exc:
             logging.exception("Model startup failed: %s", exc)
+            self.last_error = f"Model startup failed: {exc}"
             self._set_status("error")
             return False
 
@@ -126,6 +168,7 @@ class DictateService:
             self._listener.start()
         except Exception as exc:
             logging.exception("Could not start global hotkey listener: %s", exc)
+            self.last_error = f"Could not start the global hotkey: {exc}"
             self._set_status("error")
             return False
 
@@ -193,10 +236,12 @@ class DictateService:
                 self.recorder.start()
             except AudioCaptureError as exc:
                 logging.error("%s", exc)
+                self.last_error = str(exc)
                 self._set_status("error")
                 return
             except Exception as exc:
                 logging.exception("Could not start recording: %s", exc)
+                self.last_error = f"Could not start recording: {exc}"
                 self._set_status("error")
                 return
             self._start_max_timer()
@@ -316,10 +361,12 @@ class DictateService:
             logging.info("Pasted transcript (%d chars).", len(cleaned))
         except InjectionError as exc:
             logging.error("%s", exc)
+            self.last_error = str(exc)
             self._set_status("error")
             return
         except Exception as exc:
             logging.exception("Transcription failed: %s", exc)
+            self.last_error = f"Transcription failed: {exc}"
             self._set_status("error")
             return
         finally:

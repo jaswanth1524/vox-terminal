@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import argparse
 import os
-from typing import Any, Callable, Mapping
+import sys
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
 from .config import DEFAULT_MODEL
-
 
 TranscribeImpl = Callable[..., Mapping[str, Any]]
 
@@ -25,6 +26,13 @@ def configure_offline_mode(*, offline: bool = True) -> None:
     else:
         for key in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_DATASETS_OFFLINE"):
             os.environ.pop(key, None)
+
+    # huggingface_hub caches this value at import time. The onboarding cache
+    # check imports it before the transcriber is constructed, so keep the
+    # in-memory flag synchronized with the environment.
+    hub_constants = sys.modules.get("huggingface_hub.constants")
+    if hub_constants is not None:
+        hub_constants.HF_HUB_OFFLINE = offline
 
 
 def _default_transcribe_impl(audio: str | np.ndarray, **kwargs: Any) -> Mapping[str, Any]:

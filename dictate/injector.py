@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import subprocess
 import time
+from dataclasses import dataclass
 from typing import Protocol
 
 from Quartz import (
@@ -13,7 +13,6 @@ from Quartz import (
     kCGEventFlagMaskCommand,
     kCGHIDEventTap,
 )
-
 
 V_KEY_CODE = 9
 

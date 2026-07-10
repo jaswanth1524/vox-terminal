@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import threading
-from typing import Callable
+from collections.abc import Callable
+from dataclasses import dataclass
 
 from pynput import keyboard
-
 
 Callback = Callable[[], None]
 

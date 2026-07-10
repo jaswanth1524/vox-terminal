@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import argparse
 import json
-from pathlib import Path
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 from .config import DEFAULT_MODEL, DEFAULT_PARAKEET_MODEL, load_config
 from .transcriber import Transcriber, configure_offline_mode
-
 
 Clock = Callable[[], float]
 ParakeetLoader = Callable[[str], Any]

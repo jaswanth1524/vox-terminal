@@ -5,9 +5,9 @@ description = "Local macOS push-to-talk dictation for terminals and apps"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "huggingface-hub",
     "mlx-whisper",
     "numpy",
-    "parakeet-mlx",
     "pynput",
     "pyobjc-framework-Quartz",
     "rumps",
@@ -15,5 +15,33 @@ dependencies = [
     "sounddevice",
 ]
 
+[project.optional-dependencies]
+benchmark = ["parakeet-mlx"]
+
+[project.scripts]
+vox-terminal = "dictate.__main__:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
 [tool.uv]
-package = false
+package = true
+
+[dependency-groups]
+build = ["pillow>=11", "pyinstaller>=6.14"]
+dev = ["ruff>=0.12"]
+
+[tool.setuptools.packages.find]
+include = ["dictate*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["E402"]
+"tests/*" = ["E501"]

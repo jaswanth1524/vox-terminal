@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import json
+import os
+import tempfile
+import tomllib
 from dataclasses import dataclass, fields
 from pathlib import Path
-import tomllib
 from typing import Any
 
+from .paths import DEFAULT_PATHS
 
-CONFIG_PATH = Path("~/.config/dictate/config.toml").expanduser()
+CONFIG_PATH = DEFAULT_PATHS.config
 DEFAULT_MODEL = "mlx-community/whisper-large-v3-turbo"
 DEFAULT_PARAKEET_MODEL = "mlx-community/parakeet-tdt-0.6b-v2"
 
@@ -64,11 +68,11 @@ def load_config(path: Path = CONFIG_PATH) -> AppConfig:
         )
 
     config = AppConfig(**raw)
-    _validate(config, path)
+    validate_config(config, path)
     return config
 
 
-def _validate(config: AppConfig, path: Path) -> None:
+def validate_config(config: AppConfig, path: Path = CONFIG_PATH) -> None:
     if config.hotkey != "right_option":
         raise ValueError(f"{path}: only hotkey = 'right_option' is supported")
     if config.mode not in {"hold", "toggle"}:
@@ -95,7 +99,7 @@ def _validate(config: AppConfig, path: Path) -> None:
         raise ValueError(f"{path}: vad_poll_seconds must be positive")
 
 
-def as_toml_example(config: AppConfig | None = None) -> str:
+def as_toml(config: AppConfig | None = None) -> str:
     config = config or AppConfig()
     values: dict[str, Any] = {
         "hotkey": config.hotkey,
@@ -108,6 +112,8 @@ def as_toml_example(config: AppConfig | None = None) -> str:
         "restore_clipboard": config.restore_clipboard,
         "min_recording_ms": config.min_recording_ms,
         "max_recording_seconds": config.max_recording_seconds,
+        "silence_rms_threshold": config.silence_rms_threshold,
+        "initial_prompt": config.initial_prompt,
         "history_size": config.history_size,
         "vad_auto_stop": config.vad_auto_stop,
         "vad_silence_seconds": config.vad_silence_seconds,
@@ -116,14 +122,43 @@ def as_toml_example(config: AppConfig | None = None) -> str:
     }
     lines = []
     for key, value in values.items():
+        if value is None:
+            continue
         if isinstance(value, bool):
             rendered = "true" if value else "false"
         elif isinstance(value, int | float):
             rendered = str(value)
         else:
-            rendered = f'"{value}"'
+            rendered = json.dumps(value, ensure_ascii=False)
         lines.append(f"{key} = {rendered}")
     if config.custom_vocabulary:
-        quoted = ", ".join(f'"{term}"' for term in config.custom_vocabulary)
+        quoted = ", ".join(
+            json.dumps(term, ensure_ascii=False) for term in config.custom_vocabulary
+        )
         lines.append(f"custom_vocabulary = [{quoted}]")
     return "\n".join(lines) + "\n"
+
+
+def as_toml_example(config: AppConfig | None = None) -> str:
+    return as_toml(config)
+
+
+def save_config(config: AppConfig, path: Path = CONFIG_PATH) -> None:
+    """Validate and atomically persist configuration without partial writes."""
+
+    validate_config(config, path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=path.parent,
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as config_file:
+            config_file.write(as_toml(config))
+            config_file.flush()
+            os.fsync(config_file.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        temporary_path.unlink(missing_ok=True)

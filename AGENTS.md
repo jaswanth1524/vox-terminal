@@ -2,37 +2,34 @@
 
 ## Project Structure & Module Organization
 
-This repository is currently minimal and contains only `LICENSE`. As code is added, keep the top-level layout predictable:
+Vox Terminal is a Python 3.11, Apple-Silicon macOS menu-bar app. Keep the layout predictable:
 
-- `src/` for application source code.
-- `tests/` for automated tests that mirror the source layout.
-- `assets/` for static files such as images, fixtures, or sample data.
-- `docs/` for design notes, API references, and longer contributor documentation.
+- `dictate/` contains the app controller, audio, transcription, injection, configuration, and UI modules.
+- `tests/` mirrors behavior with deterministic `unittest` coverage; audio fixtures live in `tests/fixtures/`.
+- `assets/` contains app artwork, while `scripts/` contains setup, packaging, and benchmark helpers.
 
-Avoid placing implementation files at the repository root unless they are standard project entry points, such as `Makefile`, `package.json`, or `pyproject.toml`.
+Keep implementation out of the repository root except for standard entry points such as `Makefile`, `pyproject.toml`, and the app bundle spec.
 
 ## Build, Test, and Development Commands
 
-No project-specific build or test commands are defined yet. When adding tooling, document the canonical commands here and in `README.md` if one is introduced. Prefer a small, repeatable command set such as:
-
-- `make test` or the ecosystem equivalent to run the full test suite.
-- `make lint` to run format and static-analysis checks.
-- `make dev` to start a local development server or watcher.
-
-Until tooling exists, use `git status --short` before and after changes to confirm the working tree contains only intentional edits.
+- `make setup` synchronizes runtime, lint, and app-build dependencies with `uv`.
+- `make lint` runs Ruff without rewriting files.
+- `make test` runs the complete unit suite.
+- `make app` builds `dist/Vox Terminal.app`; `make install` copies and ad-hoc signs it in `~/Applications`.
+- `uv run python -m dictate --no-menubar` runs the foreground debugging service.
 
 ## Coding Style & Naming Conventions
 
-Follow the conventions of the language or framework introduced by the first implementation. Keep formatting automated where possible, and commit the formatter or linter configuration with the code. Use descriptive file and directory names: lowercase with hyphens for documentation files, and the dominant ecosystem convention for source files.
+Use four-space indentation, Python type hints, `snake_case` functions/modules, and `PascalCase` classes. Keep UI code on the macOS main thread and isolate system/ML dependencies behind injectable interfaces. Run Ruff before submitting changes.
 
 ## Testing Guidelines
 
-Add tests alongside new functionality. Prefer test files that clearly identify the unit or behavior under test, such as `tests/test_parser.py`, `parser.test.ts`, or `parser.spec.ts`. Tests should be deterministic, isolated from external services by default, and runnable with one documented command.
+Name tests `tests/test_<behavior>.py`. Mock microphones, keyboard listeners, model backends, network calls, and macOS services. The default suite must remain offline and deterministic; MLX integration is opt-in with `DICTATE_RUN_MLX_TESTS=1`.
 
 ## Commit & Pull Request Guidelines
 
-The current history contains only `Initial commit`, so no detailed commit convention is established. Use concise, imperative commit subjects, for example `Add terminal command parser`. Pull requests should include a short summary, validation steps, linked issues when applicable, and screenshots or terminal output for user-visible changes.
+History uses Conventional Commit-style subjects such as `feat: add VAD auto-stop`. Keep subjects concise and imperative. Pull requests need a summary, validation commands, linked issues when relevant, and screenshots or terminal evidence for user-visible changes.
 
 ## Security & Configuration Tips
 
-Do not commit secrets, local credentials, or generated dependency caches. Add environment examples such as `.env.example` when configuration becomes necessary, and keep real local overrides ignored by Git.
+Never commit recordings, transcripts, credentials, model caches, `.venv`, `build/`, or `dist/`. Normal runtime must stay offline; network access is allowed only after explicit user action for model provisioning or benchmarking. Preserve the existing config path and migration behavior.
