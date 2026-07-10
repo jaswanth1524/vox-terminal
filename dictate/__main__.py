@@ -14,6 +14,7 @@ from .history import TranscriptHistory
 from .hotkey import HotkeyCallbacks, RightOptionHoldListener
 from .injector import InjectionError, TextInjector, build_injector
 from .latency import LatencyHistory, LatencySample
+from .paths import DEFAULT_PATHS
 from .postprocess import clean_transcript
 from .recorder import AudioCaptureError, Recorder, Recording
 from .transcriber import ModelUnavailableError
@@ -78,7 +79,10 @@ def main() -> int:
         return 0
 
     if args.no_menubar:
-        service = DictateService(config)
+        service = DictateService(
+            config,
+            latency_history=LatencyHistory(storage_path=DEFAULT_PATHS.latency_file),
+        )
         return service.run_forever()
 
     from .controller import AppController
@@ -212,6 +216,9 @@ class DictateService:
 
     def performance_text(self) -> str:
         return self.latency_history.render()
+
+    def clear_performance_data(self) -> None:
+        self.latency_history.clear()
 
     def _install_signal_handlers(self) -> None:
         def handle_signal(signum: int, frame: object) -> None:

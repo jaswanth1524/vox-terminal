@@ -55,6 +55,9 @@ class DictateMenuBar(rumps.App):
         self.performance_item = rumps.MenuItem(
             "Performance Report…", callback=self._show_performance
         )
+        self.clear_performance_item = rumps.MenuItem(
+            "Reset Performance Data…", callback=self._clear_performance
+        )
         self.settings_item = rumps.MenuItem("Settings…", callback=self._show_settings)
         self.diagnostics_item = rumps.MenuItem(
             "Run Diagnostics…", callback=self._show_diagnostics
@@ -68,6 +71,7 @@ class DictateMenuBar(rumps.App):
             self.history_item,
             self.clear_history_item,
             self.performance_item,
+            self.clear_performance_item,
             None,
             self.settings_item,
             self.diagnostics_item,
@@ -234,6 +238,26 @@ class DictateMenuBar(rumps.App):
                 input=text.encode("utf-8"),
                 check=False,
             )
+
+    def _clear_performance(self, _sender: rumps.MenuItem) -> None:
+        response = rumps.alert(
+            title="Reset Performance Data?",
+            message=(
+                "This removes the saved timing samples used by the Performance Report. "
+                "No audio or transcript text is stored."
+            ),
+            ok="Reset",
+            cancel="Cancel",
+        )
+        if response != 1:
+            return
+        if hasattr(self.service, "clear_performance_data"):
+            self.service.clear_performance_data()
+        rumps.notification(
+            title="Vox Terminal",
+            subtitle="Performance data reset",
+            message="Saved latency timings were removed.",
+        )
 
     def _quit(self, _sender: rumps.MenuItem) -> None:
         if hasattr(self.service, "stop"):

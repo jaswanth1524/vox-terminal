@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Protocol
 
 from .config import CONFIG_PATH, AppConfig, load_config, save_config
+from .latency import LatencyHistory
 from .model_manager import ModelManager, ModelState
+from .paths import DEFAULT_PATHS
 
 StatusCallback = Callable[[str], None]
 
@@ -28,6 +30,8 @@ class Service(Protocol):
 
     def performance_text(self) -> str: ...
 
+    def clear_performance_data(self) -> None: ...
+
 
 ServiceFactory = Callable[[AppConfig], Service]
 ModelManagerFactory = Callable[[str, str, str, Callable[[ModelState], None]], ModelManager]
@@ -36,7 +40,10 @@ ModelManagerFactory = Callable[[str, str, str, Callable[[ModelState], None]], Mo
 def _default_service_factory(config: AppConfig) -> Service:
     from .__main__ import DictateService
 
-    return DictateService(config)
+    return DictateService(
+        config,
+        latency_history=LatencyHistory(storage_path=DEFAULT_PATHS.latency_file),
+    )
 
 
 def _default_model_manager_factory(
@@ -128,6 +135,10 @@ class AppController:
         if self._service is None:
             return "No latency samples yet."
         return self._service.performance_text()
+
+    def clear_performance_data(self) -> None:
+        if self._service is not None:
+            self._service.clear_performance_data()
 
     def _model_manager(self) -> ModelManager:
         return self.model_manager_factory(

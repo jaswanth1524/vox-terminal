@@ -15,6 +15,7 @@ class FakeService:
         self.starts = starts
         self.status = "stopped"
         self.stops = 0
+        self.performance_clears = 0
         self.callback = None
 
     def set_status_callback(self, callback: object) -> None:
@@ -36,6 +37,12 @@ class FakeService:
 
     def clear_history(self) -> None:
         pass
+
+    def performance_text(self) -> str:
+        return "performance"
+
+    def clear_performance_data(self) -> None:
+        self.performance_clears += 1
 
 
 class FakeModelManager:
@@ -92,6 +99,22 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(len(services), 2)
             self.assertEqual(services[0].stops, 1)
             self.assertEqual(controller.status, "idle")
+
+    def test_performance_data_is_forwarded_to_service(self) -> None:
+        services: list[FakeService] = []
+        manager = FakeModelManager(True, lambda _state: None)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            controller = AppController(
+                config_path=Path(temp_dir) / "config.toml",
+                service_factory=lambda config: services.append(FakeService(config)) or services[-1],
+                model_manager_factory=lambda _engine, _model, _language, callback: manager,
+            )
+            self.assertTrue(controller.start())
+
+            self.assertEqual(controller.performance_text(), "performance")
+            controller.clear_performance_data()
+            self.assertEqual(services[0].performance_clears, 1)
 
 
 if __name__ == "__main__":
