@@ -1,14 +1,26 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from dictate.config import DEFAULT_MODEL
-from dictate.transcriber import ModelUnavailableError, Transcriber
-
+from dictate.transcriber import ModelUnavailableError, Transcriber, configure_offline_mode
 
 FIXTURE = Path(__file__).parent / "fixtures" / "hello_world.wav"
+
+
+class OfflineModeTests(unittest.TestCase):
+    def test_updates_already_imported_huggingface_state(self) -> None:
+        from huggingface_hub import constants
+
+        configure_offline_mode(offline=False)
+        self.assertFalse(constants.HF_HUB_OFFLINE)
+
+        configure_offline_mode(offline=True)
+
+        self.assertTrue(constants.HF_HUB_OFFLINE)
+        self.assertEqual(os.environ["HF_HUB_OFFLINE"], "1")
 
 
 @unittest.skipUnless(

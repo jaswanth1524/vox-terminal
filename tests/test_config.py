@@ -1,13 +1,29 @@
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
-from dictate.config import AppConfig, as_toml_example, load_config
+from dictate.config import AppConfig, as_toml_example, load_config, save_config
 
 
 class ConfigTests(unittest.TestCase):
+    def test_save_config_round_trips_all_editable_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "nested" / "config.toml"
+            config = AppConfig(
+                mode="toggle",
+                language="fr",
+                sounds=False,
+                initial_prompt='Say "bonjour"',
+                custom_vocabulary=("Vox Terminal", "café"),
+            )
+
+            save_config(config, path)
+
+            self.assertEqual(load_config(path), config)
+            self.assertFalse(any(path.parent.glob("*.tmp")))
+
     def test_allows_toggle_and_keystroke_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "config.toml"

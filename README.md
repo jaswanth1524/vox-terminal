@@ -1,8 +1,8 @@
 # Vox Terminal
 
-Vox Terminal is a local macOS push-to-talk dictation tool. Hold Right Option anywhere, speak, release, and the transcript is pasted into the currently focused app. Audio stays on the machine. Runtime transcription is configured for offline mode; the Whisper model is downloaded only during installation.
-
-Phase 0 through Phase 5 are implemented here.
+Vox Terminal is a local macOS menu-bar dictation app. Hold Right Option anywhere,
+speak, release, and the transcript is pasted into the focused app. Audio remains in
+memory, normal transcription is forced offline, and no transcript is uploaded.
 
 ## Requirements
 
@@ -11,17 +11,22 @@ Phase 0 through Phase 5 are implemented here.
 - `uv`
 - PortAudio, if `sounddevice` cannot find an input backend: `brew install portaudio`
 
-## Install
+## Install the Local App
 
 ```sh
-./scripts/install.sh
+make setup
+make install
 ```
 
-The installer syncs Python dependencies, downloads the default model into the Hugging Face cache, writes a default config if needed, and runs permission diagnostics.
+The build creates an arm64, ad-hoc-signed app at `dist/Vox Terminal.app` and copies
+it to `~/Applications`. Launch it from Finder. On first launch, Vox Terminal checks
+the local Hugging Face cache and offers to download the approximately 1.5 GB
+Whisper model if needed. That explicit setup step is the only online app operation.
 
 ## macOS Permissions
 
-Grant permissions to the binary that launches the app, usually the venv Python printed by `install.sh`, or the terminal app if you run through Terminal, iTerm2, Warp, or VS Code.
+Grant permissions to `Vox Terminal.app`. If you run the developer CLI, grant them
+to the launching terminal and virtual-environment Python instead.
 
 Open System Settings -> Privacy & Security and grant:
 
@@ -60,7 +65,15 @@ The menu bar icon shows the current state:
 - ⏳ loading or transcribing
 - ⚠️ needs attention
 
-Use the menu's Start at Login item to install or remove `~/Library/LaunchAgents/com.user.dictate.plist`.
+Use the menu's Start at Login item to register the installed app with macOS. The
+app migrates an older repo-bound `com.user.dictate` LaunchAgent if one exists.
+
+Settings opens a native window for recording mode, language, sounds, paste method,
+clipboard restoration, and vocabulary hints. Save & Restart writes the existing
+`~/.config/dictate/config.toml` atomically and restarts the internal service.
+
+Run Diagnostics checks audio input and Accessibility access and can open Privacy
+settings. Open Logs reveals rotating logs under `~/Library/Logs/Vox Terminal/`.
 
 The History menu item shows recent pasted transcripts for the current process only. History is kept in memory, capped by `history_size`, and cleared when Vox Terminal quits or when you choose Clear History.
 
@@ -95,15 +108,30 @@ Recordings shorter than `min_recording_ms` are ignored. Recordings are capped at
 
 When `mode = "toggle"` and `vad_auto_stop = true`, Silero VAD watches the in-memory recording and stops automatically after speech is followed by `vad_silence_seconds` of silence.
 
+## Development
+
+```sh
+make lint       # Ruff static checks
+make test       # deterministic unit suite
+make app        # standalone .app bundle
+make install    # build, sign, and copy to ~/Applications
+```
+
+`uv run python -m dictate --no-menubar` remains available for foreground debugging.
+Use `uv run python -m dictate --doctor` for terminal diagnostics and
+`uv run python -m dictate --download-model` for an explicit CLI model download.
+
 ## Benchmarking
 
 Compare cached Whisper and Parakeet models on a local audio file:
 
 ```sh
-uv run python scripts/benchmark_parakeet.py --audio tests/fixtures/hello_world.wav
+make benchmark
 ```
 
-Benchmarks run offline by default and fail if the configured models are not already cached. Use `./scripts/install.sh` once while online to pre-download the default Whisper and Parakeet models, or pass `--online` to the benchmark when intentionally allowing a model download.
+Parakeet is an optional benchmark dependency and is not bundled in the daily-use
+app. Benchmarks run offline by default; pass `--online` only when intentionally
+allowing a benchmark-model download.
 
 ## Testing
 

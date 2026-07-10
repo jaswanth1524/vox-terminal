@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
 import unittest
+from datetime import datetime
 
 from dictate.history import TranscriptHistory
 

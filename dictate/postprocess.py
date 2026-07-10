@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 KNOWN_SILENCE_HALLUCINATIONS = {
     "",
     ".",

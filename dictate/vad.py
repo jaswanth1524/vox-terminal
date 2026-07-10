@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import numpy as np
-
 
 SpeechTimestampFn = Callable[..., Sequence[dict[str, float]]]
 

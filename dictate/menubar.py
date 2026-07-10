@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+import subprocess
 import threading
+from contextlib import suppress
 
 import rumps
 
 from . import autostart
-
+from .doctor import check_accessibility, check_microphone
+from .paths import DEFAULT_PATHS
+from .settings import SettingsDialog
 
 STATUS_TITLES = {
     "loading": "⏳",
+    "checking_model": "⏳",
+    "model_missing": "⚠️",
+    "downloading_model": "⬇️",
+    "warming_model": "⏳",
     "idle": "🎙️",
     "recording": "🔴",
     "transcribing": "⏳",
@@ -18,6 +26,10 @@ STATUS_TITLES = {
 
 STATUS_LABELS = {
     "loading": "Loading model",
+    "checking_model": "Checking model",
+    "model_missing": "Model setup required",
+    "downloading_model": "Downloading model",
+    "warming_model": "Warming model",
     "idle": "Idle",
     "recording": "Recording",
     "transcribing": "Transcribing",
@@ -32,12 +44,19 @@ class DictateMenuBar(rumps.App):
         self.service = service
         self._status = "loading"
         self._status_lock = threading.Lock()
+        self._model_prompt_shown = False
+        self._error_prompt_shown = False
         self.status_item = rumps.MenuItem("Status: Loading model")
         self.history_item = rumps.MenuItem("History", callback=self._show_history)
         self.clear_history_item = rumps.MenuItem(
             "Clear History",
             callback=self._clear_history,
         )
+        self.settings_item = rumps.MenuItem("Settings…", callback=self._show_settings)
+        self.diagnostics_item = rumps.MenuItem(
+            "Run Diagnostics…", callback=self._show_diagnostics
+        )
+        self.logs_item = rumps.MenuItem("Open Logs", callback=self._open_logs)
         self.login_item = rumps.MenuItem("Start at Login", callback=self._toggle_login)
         self.quit_item = rumps.MenuItem("Quit", callback=self._quit)
         self.menu = [
@@ -46,9 +65,15 @@ class DictateMenuBar(rumps.App):
             self.history_item,
             self.clear_history_item,
             None,
+            self.settings_item,
+            self.diagnostics_item,
+            self.logs_item,
+            None,
             self.login_item,
             self.quit_item,
         ]
+        with suppress(Exception):
+            autostart.migrate_legacy()
         self._refresh_login_item()
         self._timer = rumps.Timer(self._refresh_status, 0.25)
         self._timer.start()
@@ -67,7 +92,7 @@ class DictateMenuBar(rumps.App):
     def _start_service(self) -> None:
         if hasattr(self.service, "start"):
             ok = self.service.start()
-            if not ok:
+            if not ok and getattr(self.service, "status", "error") != "model_missing":
                 self.set_status("error")
 
     def _refresh_status(self, _sender: rumps.Timer) -> None:
@@ -75,6 +100,29 @@ class DictateMenuBar(rumps.App):
             status = self._status
         self.title = STATUS_TITLES.get(status, "🎙️")
         self.status_item.title = f"Status: {STATUS_LABELS.get(status, status)}"
+        if status == "model_missing" and not self._model_prompt_shown:
+            self._model_prompt_shown = True
+            response = rumps.alert(
+                title="Set Up Vox Terminal",
+                message=(
+                    "The speech model is not installed. Download it once now "
+                    "(about 1.5 GB)? Normal dictation stays offline afterward."
+                ),
+                ok="Download Model",
+                cancel="Quit",
+            )
+            if response == 1:
+                threading.Thread(target=self._download_model, daemon=True).start()
+            else:
+                self._quit(self.quit_item)
+        elif status == "error" and not self._error_prompt_shown:
+            self._error_prompt_shown = True
+            message = getattr(self.service, "last_error", None) or (
+                "Vox Terminal needs attention. Run Diagnostics or open the logs for details."
+            )
+            rumps.alert(title="Vox Terminal", message=message)
+        elif status == "idle":
+            self._error_prompt_shown = False
 
     def _refresh_login_item(self) -> None:
         self.login_item.state = 1 if autostart.is_enabled() else 0
@@ -91,6 +139,61 @@ class DictateMenuBar(rumps.App):
                 title="Vox Terminal",
                 message=f"Could not update Start at Login: {exc}",
             )
+
+    def _download_model(self) -> None:
+        if hasattr(self.service, "download_and_start"):
+            ok = self.service.download_and_start()
+            if not ok:
+                self.set_status("error")
+
+    def _show_settings(self, _sender: rumps.MenuItem) -> None:
+        config = getattr(self.service, "config", None)
+        if config is None:
+            return
+        try:
+            updated = SettingsDialog(config).run()
+        except Exception as exc:
+            rumps.alert(title="Vox Terminal", message=f"Could not open settings: {exc}")
+            return
+        if updated is None:
+            return
+        threading.Thread(
+            target=self._apply_settings,
+            args=(updated,),
+            daemon=True,
+        ).start()
+
+    def _apply_settings(self, config: object) -> None:
+        try:
+            ok = self.service.apply_config(config)
+        except Exception as exc:
+            rumps.alert(title="Vox Terminal", message=f"Could not save settings: {exc}")
+            return
+        if not ok:
+            self.set_status("error")
+
+    def _show_diagnostics(self, _sender: rumps.MenuItem) -> None:
+        checks = [check_microphone(), check_accessibility()]
+        lines = [f"{'✓' if passed else '⚠︎'} {message}" for passed, message in checks]
+        lines.append("Input Monitoring is confirmed when the Right Option hotkey works.")
+        response = rumps.alert(
+            title="Vox Terminal Diagnostics",
+            message="\n\n".join(lines),
+            ok="Open Privacy Settings",
+            cancel="Done",
+        )
+        if response == 1:
+            subprocess.run(
+                [
+                    "open",
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy",
+                ],
+                check=False,
+            )
+
+    def _open_logs(self, _sender: rumps.MenuItem) -> None:
+        DEFAULT_PATHS.logs.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["open", str(DEFAULT_PATHS.logs)], check=False)
 
     def _show_history(self, _sender: rumps.MenuItem) -> None:
         text = "No transcript history yet."
