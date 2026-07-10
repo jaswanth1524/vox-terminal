@@ -20,8 +20,8 @@ make install
 
 The build creates an arm64, ad-hoc-signed app at `dist/Vox Terminal.app` and copies
 it to `~/Applications`. Launch it from Finder. On first launch, Vox Terminal checks
-the local Hugging Face cache and offers to download the approximately 1.5 GB
-Whisper model if needed. That explicit setup step is the only online app operation.
+the local Hugging Face cache and offers to download the selected speech model if
+needed. That explicit setup step is the only online app operation.
 
 ## macOS Permissions
 
@@ -56,7 +56,11 @@ Run without the menu bar for terminal debugging:
 uv run python -m dictate --no-menubar
 ```
 
-In hold mode, hold Right Option to record and release it to transcribe. In toggle mode, press Right Option once to start and again to stop. The transcript is pasted through the clipboard, then the previous text clipboard is restored after about 300 ms. Non-text clipboard content is not preserved.
+In hold mode, hold Right Option to record and release it to transcribe. In toggle
+mode, press Right Option once to start and again to stop. The transcript is pasted
+through the clipboard immediately; text clipboard restoration runs in the
+background after about 300 ms and does not overwrite newer user-copied text.
+Non-text clipboard content is not preserved.
 
 The menu bar icon shows the current state:
 
@@ -68,12 +72,14 @@ The menu bar icon shows the current state:
 Use the menu's Start at Login item to register the installed app with macOS. The
 app migrates an older repo-bound `com.user.dictate` LaunchAgent if one exists.
 
-Settings opens a native window for recording mode, language, sounds, paste method,
-clipboard restoration, and vocabulary hints. Save & Restart writes the existing
+Settings opens a native window for speech engine, recording mode, language,
+sounds, paste method, clipboard restoration, and vocabulary hints. Save & Restart writes the existing
 `~/.config/dictate/config.toml` atomically and restarts the internal service.
 
 Run Diagnostics checks audio input and Accessibility access and can open Privacy
 settings. Open Logs reveals rotating logs under `~/Library/Logs/Vox Terminal/`.
+Performance Report shows local p50/p95 release-to-paste and inference latency. It
+contains timings only—never audio or transcript text.
 
 The History menu item shows recent pasted transcripts for the current process only. History is kept in memory, capped by `history_size`, and cleared when Vox Terminal quits or when you choose Clear History.
 
@@ -82,10 +88,12 @@ The History menu item shows recent pasted transcripts for the current process on
 Create `~/.config/dictate/config.toml` to override defaults:
 
 ```toml
+engine = "whisper"
 hotkey = "right_option"
 mode = "hold"
 model = "mlx-community/whisper-large-v3-turbo"
 parakeet_model = "mlx-community/parakeet-tdt-0.6b-v2"
+parakeet_beam_size = 1
 language = "en"
 sounds = true
 paste_mode = "clipboard"
@@ -106,6 +114,10 @@ Recordings shorter than `min_recording_ms` are ignored. Recordings are capped at
 
 `custom_vocabulary` is appended to Whisper's `initial_prompt` as vocabulary hints. This improves recognition of project-specific terms without sending audio or prompts off-machine.
 
+`engine = "whisper"` remains the accuracy-first default. Set `engine = "parakeet"`
+or select Parakeet in Settings for substantially lower English latency. Only the
+selected engine is loaded into memory; cached models are retained for switching.
+
 When `mode = "toggle"` and `vad_auto_stop = true`, Silero VAD watches the in-memory recording and stops automatically after speech is followed by `vad_silence_seconds` of silence.
 
 ## Development
@@ -123,15 +135,18 @@ Use `uv run python -m dictate --doctor` for terminal diagnostics and
 
 ## Benchmarking
 
-Compare cached Whisper and Parakeet models on a local audio file:
+Run the deterministic 20-phrase latency and accuracy promotion gate:
 
 ```sh
 make benchmark
 ```
 
-Parakeet is an optional benchmark dependency and is not bundled in the daily-use
-app. Benchmarks run offline by default; pass `--online` only when intentionally
-allowing a benchmark-model download.
+The benchmark synthesizes temporary English audio, runs cached models offline, and
+reports p50, p95, WER, and whether Parakeet meets the default-engine gate. Temporary
+audio is deleted when the command exits. Use `--parakeet-only` to test Parakeet
+without re-running Whisper. Run
+`uv run python scripts/benchmark_latency.py --interactive` for ten prompted,
+user-spoken comparisons; captured audio remains in memory and is discarded.
 
 ## Testing
 
@@ -149,4 +164,7 @@ DICTATE_RUN_MLX_TESTS=1 uv run python -m unittest tests.test_transcriber
 
 ## Privacy Notes
 
-Vox Terminal sets Hugging Face offline environment variables during normal runtime. If the model is missing from `~/.cache/huggingface`, runtime startup fails with installation instructions instead of attempting a network download. Audio is held in memory as NumPy arrays; Vox Terminal does not write utterances to disk.
+Vox Terminal sets Hugging Face offline environment variables during normal runtime.
+If the selected model is missing from `~/.cache/huggingface`, the app requests an
+explicit download instead of silently using the network. Dictation audio is held
+in memory as NumPy arrays and is never written to disk.

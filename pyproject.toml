@@ -8,15 +8,13 @@ dependencies = [
     "huggingface-hub",
     "mlx-whisper",
     "numpy",
+    "parakeet-mlx==0.5.2",
     "pynput",
     "pyobjc-framework-Quartz",
     "rumps",
     "silero-vad",
     "sounddevice",
 ]
-
-[project.optional-dependencies]
-benchmark = ["parakeet-mlx"]
 
 [project.scripts]
 vox-terminal = "dictate.__main__:main"

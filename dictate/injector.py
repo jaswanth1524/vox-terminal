@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import subprocess
+import threading
 import time
-from dataclasses import dataclass
-from typing import Protocol
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any, Protocol
 
 from Quartz import (
     CGEventCreateKeyboardEvent,
@@ -38,21 +40,51 @@ def build_injector(*, paste_mode: str, restore_clipboard: bool) -> TextInjector:
 class ClipboardInjector:
     restore_clipboard: bool = True
     restore_delay_seconds: float = 0.3
+    timer_factory: Callable[[float, Callable[[], None]], Any] = threading.Timer
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False)
+    _restore_timer: Any | None = field(default=None, init=False)
+    _original_clipboard: str | None = field(default=None, init=False)
 
     def inject(self, text: str) -> None:
         if not text:
             return
 
-        previous = self._read_clipboard_text()
-        try:
-            self._write_clipboard_text(text)
-            self._paste()
-            time.sleep(self.restore_delay_seconds)
-        except Exception as exc:
-            raise InjectionError(f"Could not paste transcript: {exc}") from exc
-        finally:
-            if self.restore_clipboard:
-                self._write_clipboard_text(previous)
+        with self._lock:
+            previous = self._prepare_previous_clipboard()
+            try:
+                self._write_clipboard_text(text)
+                self._paste()
+                if self.restore_clipboard:
+                    self._schedule_restore(original=previous, transcript=text)
+            except Exception as exc:
+                if self.restore_clipboard:
+                    self._write_clipboard_text(previous)
+                raise InjectionError(f"Could not paste transcript: {exc}") from exc
+
+    def _prepare_previous_clipboard(self) -> str:
+        if self._restore_timer is not None:
+            self._restore_timer.cancel()
+            self._restore_timer = None
+            if self._original_clipboard is not None:
+                return self._original_clipboard
+        return self._read_clipboard_text()
+
+    def _schedule_restore(self, *, original: str, transcript: str) -> None:
+        self._original_clipboard = original
+
+        def restore() -> None:
+            with self._lock:
+                try:
+                    if self._read_clipboard_text() == transcript:
+                        self._write_clipboard_text(original)
+                finally:
+                    self._restore_timer = None
+                    self._original_clipboard = None
+
+        timer = self.timer_factory(self.restore_delay_seconds, restore)
+        timer.daemon = True
+        self._restore_timer = timer
+        timer.start()
 
     def _read_clipboard_text(self) -> str:
         result = subprocess.run(

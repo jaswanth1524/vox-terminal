@@ -51,6 +51,7 @@ class ConfigTests(unittest.TestCase):
     def test_example_includes_phase_2_controls(self) -> None:
         example = as_toml_example(AppConfig())
         self.assertIn('mode = "hold"', example)
+        self.assertIn('engine = "whisper"', example)
         self.assertIn('paste_mode = "clipboard"', example)
         self.assertIn('parakeet_model = "mlx-community/parakeet-tdt-0.6b-v2"', example)
         self.assertIn("max_recording_seconds = 120", example)

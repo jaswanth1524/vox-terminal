@@ -10,7 +10,7 @@ test:
 	uv run python -m unittest discover -s tests
 
 benchmark:
-	uv run --extra benchmark python scripts/benchmark_parakeet.py --audio tests/fixtures/hello_world.wav
+	uv run python scripts/benchmark_latency.py
 
 icon:
 	sh scripts/build_icon.sh

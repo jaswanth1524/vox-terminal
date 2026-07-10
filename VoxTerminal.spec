@@ -11,7 +11,7 @@ os.environ["TRANSFORMERS_OFFLINE"] = "1"
 datas = []
 binaries = []
 hiddenimports = []
-for package in ("mlx", "mlx_whisper", "silero_vad"):
+for package in ("mlx", "mlx_whisper", "parakeet_mlx", "silero_vad"):
     package_datas, package_binaries, package_hidden = collect_all(package)
     datas.extend(package_datas)
     binaries.extend(package_binaries)
@@ -25,7 +25,6 @@ analysis = Analysis(
     datas=datas,
     hiddenimports=hiddenimports,
     excludes=[
-        "parakeet_mlx",
         "torch.cuda",
         "torch.distributed",
         "torch.testing",

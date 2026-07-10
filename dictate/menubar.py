@@ -52,6 +52,9 @@ class DictateMenuBar(rumps.App):
             "Clear History",
             callback=self._clear_history,
         )
+        self.performance_item = rumps.MenuItem(
+            "Performance Report…", callback=self._show_performance
+        )
         self.settings_item = rumps.MenuItem("Settings…", callback=self._show_settings)
         self.diagnostics_item = rumps.MenuItem(
             "Run Diagnostics…", callback=self._show_diagnostics
@@ -64,6 +67,7 @@ class DictateMenuBar(rumps.App):
             None,
             self.history_item,
             self.clear_history_item,
+            self.performance_item,
             None,
             self.settings_item,
             self.diagnostics_item,
@@ -102,11 +106,14 @@ class DictateMenuBar(rumps.App):
         self.status_item.title = f"Status: {STATUS_LABELS.get(status, status)}"
         if status == "model_missing" and not self._model_prompt_shown:
             self._model_prompt_shown = True
+            config = getattr(self.service, "config", None)
+            engine = getattr(config, "engine", "speech")
+            size = "about 2.3 GB" if engine == "parakeet" else "about 1.5 GB"
             response = rumps.alert(
                 title="Set Up Vox Terminal",
                 message=(
-                    "The speech model is not installed. Download it once now "
-                    "(about 1.5 GB)? Normal dictation stays offline afterward."
+                    f"The {engine.title()} speech model is not installed. Download it "
+                    f"once now ({size})? Normal dictation stays offline afterward."
                 ),
                 ok="Download Model",
                 cancel="Quit",
@@ -123,6 +130,7 @@ class DictateMenuBar(rumps.App):
             rumps.alert(title="Vox Terminal", message=message)
         elif status == "idle":
             self._error_prompt_shown = False
+            self._model_prompt_shown = False
 
     def _refresh_login_item(self) -> None:
         self.login_item.state = 1 if autostart.is_enabled() else 0
@@ -209,6 +217,23 @@ class DictateMenuBar(rumps.App):
             subtitle="History cleared",
             message="Transcript history was cleared.",
         )
+
+    def _show_performance(self, _sender: rumps.MenuItem) -> None:
+        text = "No latency samples yet."
+        if hasattr(self.service, "performance_text"):
+            text = self.service.performance_text()
+        response = rumps.alert(
+            title="Vox Terminal Performance",
+            message=text,
+            ok="Copy Report",
+            cancel="Done",
+        )
+        if response == 1:
+            subprocess.run(
+                ["pbcopy"],
+                input=text.encode("utf-8"),
+                check=False,
+            )
 
     def _quit(self, _sender: rumps.MenuItem) -> None:
         if hasattr(self.service, "stop"):
