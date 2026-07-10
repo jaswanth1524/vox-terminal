@@ -33,3 +33,4 @@ History uses Conventional Commit-style subjects such as `feat: add VAD auto-stop
 ## Security & Configuration Tips
 
 Never commit recordings, transcripts, latency reports, credentials, model caches, `.venv`, `build/`, or `dist/`. Normal runtime must stay offline; network access is allowed only after explicit user action for model provisioning. Preserve the existing config path and migration behavior.
+Runtime performance data belongs under `~/Library/Application Support/Vox Terminal/` and must contain numeric timings only—never audio, transcript text, prompts, or application names.

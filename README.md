@@ -79,7 +79,10 @@ sounds, paste method, clipboard restoration, and vocabulary hints. Save & Restar
 Run Diagnostics checks audio input and Accessibility access and can open Privacy
 settings. Open Logs reveals rotating logs under `~/Library/Logs/Vox Terminal/`.
 Performance Report shows local p50/p95 release-to-paste and inference latency. It
-contains timings only—never audio or transcript text.
+keeps the latest 100 samples across launches, includes per-engine comparisons, and
+contains timings only—never audio or transcript text. Use Reset Performance Data
+to remove the saved samples at any time. The data file is stored at
+`~/Library/Application Support/Vox Terminal/latency.json`.
 
 The History menu item shows recent pasted transcripts for the current process only. History is kept in memory, capped by `history_size`, and cleared when Vox Terminal quits or when you choose Clear History.
 
@@ -167,4 +170,6 @@ DICTATE_RUN_MLX_TESTS=1 uv run python -m unittest tests.test_transcriber
 Vox Terminal sets Hugging Face offline environment variables during normal runtime.
 If the selected model is missing from `~/.cache/huggingface`, the app requests an
 explicit download instead of silently using the network. Dictation audio is held
-in memory as NumPy arrays and is never written to disk.
+in memory as NumPy arrays and is never written to disk. Performance history stores
+only the selected engine and numeric stage timings; it does not contain recordings,
+transcripts, prompts, or target-app details.
