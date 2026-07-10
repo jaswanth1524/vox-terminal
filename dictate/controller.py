@@ -26,9 +26,11 @@ class Service(Protocol):
 
     def clear_history(self) -> None: ...
 
+    def performance_text(self) -> str: ...
+
 
 ServiceFactory = Callable[[AppConfig], Service]
-ModelManagerFactory = Callable[[str, str, Callable[[ModelState], None]], ModelManager]
+ModelManagerFactory = Callable[[str, str, str, Callable[[ModelState], None]], ModelManager]
 
 
 def _default_service_factory(config: AppConfig) -> Service:
@@ -38,11 +40,12 @@ def _default_service_factory(config: AppConfig) -> Service:
 
 
 def _default_model_manager_factory(
+    engine: str,
     model: str,
     language: str,
     callback: Callable[[ModelState], None],
 ) -> ModelManager:
-    return ModelManager(model, language, callback)
+    return ModelManager(engine, model, language, callback)
 
 
 @dataclass
@@ -121,9 +124,15 @@ class AppController:
         if self._service is not None:
             self._service.clear_history()
 
+    def performance_text(self) -> str:
+        if self._service is None:
+            return "No latency samples yet."
+        return self._service.performance_text()
+
     def _model_manager(self) -> ModelManager:
         return self.model_manager_factory(
-            self.config.model,
+            self.config.engine,
+            self.config.selected_model,
             self.config.language,
             self._set_model_state,
         )

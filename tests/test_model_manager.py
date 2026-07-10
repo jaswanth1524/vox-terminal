@@ -12,7 +12,9 @@ class ModelManagerTests(unittest.TestCase):
     def test_cached_check_never_allows_network(self, snapshot_download: mock.Mock) -> None:
         states: list[ModelState] = []
 
-        self.assertTrue(ModelManager("example/model", "en", states.append).is_available())
+        self.assertTrue(
+            ModelManager("whisper", "example/model", "en", states.append).is_available()
+        )
 
         snapshot_download.assert_called_once_with(
             repo_id="example/model",
@@ -29,7 +31,7 @@ class ModelManagerTests(unittest.TestCase):
     ) -> None:
         states: list[ModelState] = []
 
-        ModelManager("example/model", "en", states.append).download()
+        ModelManager("whisper", "example/model", "en", states.append).download()
 
         snapshot_download.assert_called_once_with(
             repo_id="example/model",
@@ -38,6 +40,22 @@ class ModelManagerTests(unittest.TestCase):
         transcriber.return_value.load.assert_called_once_with()
         self.assertEqual(os.environ["HF_HUB_OFFLINE"], "1")
         self.assertEqual(states[-1], ModelState.READY)
+
+    @mock.patch("dictate.model_manager.ParakeetEngine")
+    @mock.patch("huggingface_hub.snapshot_download")
+    def test_download_warms_selected_parakeet_engine(
+        self,
+        snapshot_download: mock.Mock,
+        parakeet: mock.Mock,
+    ) -> None:
+        ModelManager("parakeet", "example/parakeet", "en").download()
+
+        snapshot_download.assert_called_once_with(
+            repo_id="example/parakeet",
+            local_files_only=False,
+        )
+        parakeet.assert_called_once_with(model="example/parakeet", offline=True)
+        parakeet.return_value.load.assert_called_once_with()
 
 
 if __name__ == "__main__":

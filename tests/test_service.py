@@ -166,6 +166,7 @@ class ServiceTests(unittest.TestCase):
 
         self.assertEqual(injector.injected, ["hello"])
         self.assertEqual([entry.text for entry in history.entries()], ["hello"])
+        self.assertEqual(len(service.latency_history.samples()), 1)
 
     def test_vad_auto_stop_stops_toggle_recording(self) -> None:
         recorder = FakeRecorder(duration=2.0)

@@ -9,12 +9,14 @@ import time
 from collections.abc import Callable
 
 from .config import AppConfig, load_config
+from .engines import TranscriptionEngine, build_engine
 from .history import TranscriptHistory
 from .hotkey import HotkeyCallbacks, RightOptionHoldListener
 from .injector import InjectionError, TextInjector, build_injector
+from .latency import LatencyHistory, LatencySample
 from .postprocess import clean_transcript
 from .recorder import AudioCaptureError, Recorder, Recording
-from .transcriber import ModelUnavailableError, Transcriber
+from .transcriber import ModelUnavailableError
 from .vad import SileroVadAutoStop
 
 START_SOUND = "/System/Library/Sounds/Tink.aiff"
@@ -98,24 +100,21 @@ class DictateService:
         *,
         status_callback: StatusCallback | None = None,
         recorder: Recorder | None = None,
-        transcriber: Transcriber | None = None,
+        transcriber: TranscriptionEngine | None = None,
         injector: TextInjector | None = None,
         history: TranscriptHistory | None = None,
         vad_auto_stop: SileroVadAutoStop | None = None,
+        latency_history: LatencyHistory | None = None,
     ) -> None:
         self.config = config
         self.recorder = recorder or Recorder(max_seconds=config.max_recording_seconds)
-        self.transcriber = transcriber or Transcriber(
-            model=config.model,
-            language=config.language,
-            initial_prompt=config.whisper_initial_prompt,
-            offline=True,
-        )
+        self.transcriber = transcriber or build_engine(config)
         self.injector = injector or build_injector(
             paste_mode=config.paste_mode,
             restore_clipboard=config.restore_clipboard,
         )
         self.history = history or TranscriptHistory(config.history_size)
+        self.latency_history = latency_history or LatencyHistory()
         self.vad_auto_stop = vad_auto_stop or SileroVadAutoStop(
             silence_seconds=config.vad_silence_seconds,
             min_speech_seconds=config.vad_min_speech_seconds,
@@ -144,7 +143,11 @@ class DictateService:
         self.last_error = None
         self._set_status("loading")
         try:
-            logging.info("Loading model once at startup: %s", self.config.model)
+            logging.info(
+                "Loading %s model once at startup: %s",
+                self.config.engine,
+                self.config.selected_model,
+            )
             self.transcriber.load()
         except ModelUnavailableError as exc:
             logging.error("%s", exc)
@@ -207,6 +210,9 @@ class DictateService:
     def clear_history(self) -> None:
         self.history.clear()
 
+    def performance_text(self) -> str:
+        return self.latency_history.render()
+
     def _install_signal_handlers(self) -> None:
         def handle_signal(signum: int, frame: object) -> None:
             del signum, frame
@@ -252,6 +258,7 @@ class DictateService:
         logging.info("Recording...")
 
     def _finish_recording(self, reason: str) -> None:
+        release_started_ns = time.perf_counter_ns()
         with self._recording_lock:
             if not self.recorder.is_recording:
                 return
@@ -265,6 +272,8 @@ class DictateService:
                 self._cancel_max_timer()
                 self._stop_vad_monitor()
 
+        finalized_ns = time.perf_counter_ns()
+
         self._play_sound(STOP_SOUND)
         logging.info("Stopped recording: %s.", reason)
 
@@ -276,7 +285,7 @@ class DictateService:
 
         worker = threading.Thread(
             target=self._transcribe_and_inject,
-            args=(recording,),
+            args=(recording, release_started_ns, finalized_ns),
             daemon=True,
         )
         worker.start()
@@ -339,7 +348,14 @@ class DictateService:
                 self._finish_recording("VAD auto-stop")
                 return
 
-    def _transcribe_and_inject(self, recording: Recording) -> None:
+    def _transcribe_and_inject(
+        self,
+        recording: Recording,
+        release_started_ns: int | None = None,
+        finalized_ns: int | None = None,
+    ) -> None:
+        release_started_ns = release_started_ns or time.perf_counter_ns()
+        finalized_ns = finalized_ns or release_started_ns
         if not self._transcribing.acquire(blocking=False):
             logging.info("Ignoring recording while transcription is in flight.")
             self._set_status("idle")
@@ -347,7 +363,9 @@ class DictateService:
         self._set_status("transcribing")
         try:
             logging.info("Transcribing %.2fs of audio...", recording.duration_seconds)
+            inference_started_ns = time.perf_counter_ns()
             transcript = self.transcriber.transcribe(recording.audio)
+            inference_finished_ns = time.perf_counter_ns()
             cleaned = clean_transcript(
                 transcript,
                 rms=recording.rms,
@@ -356,8 +374,31 @@ class DictateService:
             if not cleaned:
                 logging.info("No speech detected; nothing pasted.")
                 return
+            postprocess_finished_ns = time.perf_counter_ns()
             self.injector.inject(cleaned)
+            paste_finished_ns = time.perf_counter_ns()
             self.history.add(cleaned)
+            sample = LatencySample(
+                engine=getattr(self.transcriber, "name", self.config.engine),
+                audio_ms=recording.duration_seconds * 1_000,
+                finalize_ms=(finalized_ns - release_started_ns) / 1_000_000,
+                inference_ms=(inference_finished_ns - inference_started_ns) / 1_000_000,
+                postprocess_ms=(postprocess_finished_ns - inference_finished_ns) / 1_000_000,
+                paste_ms=(paste_finished_ns - postprocess_finished_ns) / 1_000_000,
+                total_ms=(paste_finished_ns - release_started_ns) / 1_000_000,
+            )
+            self.latency_history.add(sample)
+            logging.info(
+                "Latency engine=%s audio_ms=%.0f finalize_ms=%.1f inference_ms=%.1f "
+                "postprocess_ms=%.1f paste_ms=%.1f total_ms=%.1f",
+                sample.engine,
+                sample.audio_ms,
+                sample.finalize_ms,
+                sample.inference_ms,
+                sample.postprocess_ms,
+                sample.paste_ms,
+                sample.total_ms,
+            )
             logging.info("Pasted transcript (%d chars).", len(cleaned))
         except InjectionError as exc:
             logging.error("%s", exc)

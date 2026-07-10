@@ -22,6 +22,18 @@ class OfflineModeTests(unittest.TestCase):
         self.assertTrue(constants.HF_HUB_OFFLINE)
         self.assertEqual(os.environ["HF_HUB_OFFLINE"], "1")
 
+    def test_whisper_uses_single_greedy_temperature_and_realistic_warmup(self) -> None:
+        calls: list[tuple[int, float]] = []
+
+        def transcribe(audio: object, **kwargs: object) -> dict[str, str]:
+            calls.append((audio.size, kwargs["temperature"]))
+            return {"text": "ready"}
+
+        engine = Transcriber(model="cached/model", transcribe_impl=transcribe)
+        engine.load()
+
+        self.assertEqual(calls, [(16_000, 0.0)])
+
 
 @unittest.skipUnless(
     os.environ.get("DICTATE_RUN_MLX_TESTS") == "1",

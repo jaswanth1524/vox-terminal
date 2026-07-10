@@ -4,7 +4,7 @@
 
 Vox Terminal is a Python 3.11, Apple-Silicon macOS menu-bar app. Keep the layout predictable:
 
-- `dictate/` contains the app controller, audio, transcription, injection, configuration, and UI modules.
+- `dictate/` contains the app controller, audio, engine adapters, latency instrumentation, injection, configuration, and UI modules.
 - `tests/` mirrors behavior with deterministic `unittest` coverage; audio fixtures live in `tests/fixtures/`.
 - `assets/` contains app artwork, while `scripts/` contains setup, packaging, and benchmark helpers.
 
@@ -14,7 +14,7 @@ Keep implementation out of the repository root except for standard entry points 
 
 - `make setup` synchronizes runtime, lint, and app-build dependencies with `uv`.
 - `make lint` runs Ruff without rewriting files.
-- `make test` runs the complete unit suite.
+- `make test` runs the complete unit suite; `make benchmark` runs the offline engine-promotion gate.
 - `make app` builds `dist/Vox Terminal.app`; `make install` copies and ad-hoc signs it in `~/Applications`.
 - `uv run python -m dictate --no-menubar` runs the foreground debugging service.
 
@@ -32,4 +32,4 @@ History uses Conventional Commit-style subjects such as `feat: add VAD auto-stop
 
 ## Security & Configuration Tips
 
-Never commit recordings, transcripts, credentials, model caches, `.venv`, `build/`, or `dist/`. Normal runtime must stay offline; network access is allowed only after explicit user action for model provisioning or benchmarking. Preserve the existing config path and migration behavior.
+Never commit recordings, transcripts, latency reports, credentials, model caches, `.venv`, `build/`, or `dist/`. Normal runtime must stay offline; network access is allowed only after explicit user action for model provisioning. Preserve the existing config path and migration behavior.

@@ -49,7 +49,7 @@ class SettingsDialog:
         self.config = config
         self.accepted = False
         self.window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
-            NSMakeRect(0, 0, 500, 430),
+            NSMakeRect(0, 0, 500, 474),
             NSWindowStyleMaskTitled | NSWindowStyleMaskClosable,
             NSBackingStoreBuffered,
             False,
@@ -57,6 +57,14 @@ class SettingsDialog:
         self.window.setTitle_("Vox Terminal Settings")
         self.window.center()
         content = self.window.contentView()
+
+        content.addSubview_(_label("Speech engine", 24, 418))
+        self.engine = NSPopUpButton.alloc().initWithFrame_pullsDown_(
+            NSMakeRect(170, 418, 290, 26), False
+        )
+        self.engine.addItemsWithTitles_(["Parakeet", "Whisper"])
+        self.engine.selectItemWithTitle_(config.engine.title())
+        content.addSubview_(self.engine)
 
         content.addSubview_(_label("Recording mode", 24, 374))
         self.mode = NSPopUpButton.alloc().initWithFrame_pullsDown_(
@@ -140,6 +148,7 @@ class SettingsDialog:
         )
         updated = replace(
             self.config,
+            engine=str(self.engine.titleOfSelectedItem()).lower(),
             mode=str(self.mode.titleOfSelectedItem()).lower(),
             language=str(self.language.stringValue()).strip() or "en",
             paste_mode=str(self.paste_mode.titleOfSelectedItem()).lower(),

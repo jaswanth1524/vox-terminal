@@ -47,7 +47,9 @@ class Transcriber:
     language: str = "en"
     initial_prompt: str | None = None
     offline: bool = True
+    temperature: float = 0.0
     transcribe_impl: TranscribeImpl = _default_transcribe_impl
+    name: str = field(default="whisper", init=False)
     _loaded: bool = field(default=False, init=False)
 
     def __post_init__(self) -> None:
@@ -56,7 +58,7 @@ class Transcriber:
     def load(self) -> None:
         if self._loaded:
             return
-        silent_warmup = np.zeros(160, dtype=np.float32)
+        silent_warmup = np.zeros(16_000, dtype=np.float32)
         try:
             self._call_backend(silent_warmup)
         except Exception as exc:
@@ -82,6 +84,7 @@ class Transcriber:
             verbose=None,
             condition_on_previous_text=False,
             initial_prompt=self.initial_prompt,
+            temperature=self.temperature,
         )
 
 

@@ -5,6 +5,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from enum import StrEnum
 
+from .engines import ParakeetEngine
 from .transcriber import Transcriber, configure_offline_mode
 
 
@@ -22,6 +23,7 @@ StateCallback = Callable[[ModelState], None]
 
 @dataclass
 class ModelManager:
+    engine: str
     model: str
     language: str
     state_callback: StateCallback | None = None
@@ -57,11 +59,15 @@ class ModelManager:
             constants.HF_HUB_OFFLINE = False
             snapshot_download(repo_id=self.model, local_files_only=False)
             self._set_state(ModelState.WARMING)
-            Transcriber(
-                model=self.model,
-                language=self.language,
-                offline=True,
-            ).load()
+            if self.engine == "parakeet":
+                ParakeetEngine(model=self.model, offline=True).load()
+            else:
+                Transcriber(
+                    model=self.model,
+                    language=self.language,
+                    offline=True,
+                    temperature=0.0,
+                ).load()
         except Exception:
             self._set_state(ModelState.ERROR)
             raise

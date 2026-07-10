@@ -63,7 +63,7 @@ class ControllerTests(unittest.TestCase):
             controller = AppController(
                 config_path=Path(temp_dir) / "config.toml",
                 service_factory=lambda config: services.append(FakeService(config)) or services[-1],
-                model_manager_factory=lambda _model, _language, callback: FakeModelManager(
+                model_manager_factory=lambda _engine, _model, _language, callback: FakeModelManager(
                     False, callback
                 ),
             )
@@ -82,7 +82,7 @@ class ControllerTests(unittest.TestCase):
             controller = AppController(
                 config_path=path,
                 service_factory=lambda config: services.append(FakeService(config)) or services[-1],
-                model_manager_factory=lambda _model, _language, callback: manager,
+                model_manager_factory=lambda _engine, _model, _language, callback: manager,
             )
             self.assertTrue(controller.start())
 

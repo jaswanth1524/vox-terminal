@@ -17,10 +17,12 @@ DEFAULT_PARAKEET_MODEL = "mlx-community/parakeet-tdt-0.6b-v2"
 
 @dataclass(frozen=True)
 class AppConfig:
+    engine: str = "whisper"
     hotkey: str = "right_option"
     mode: str = "hold"
     model: str = DEFAULT_MODEL
     parakeet_model: str = DEFAULT_PARAKEET_MODEL
+    parakeet_beam_size: int = 1
     language: str = "en"
     sounds: bool = True
     paste_mode: str = "clipboard"
@@ -46,6 +48,10 @@ class AppConfig:
             parts.append(f"Vocabulary hints: {terms}.")
         prompt = " ".join(part for part in parts if part)
         return prompt or None
+
+    @property
+    def selected_model(self) -> str:
+        return self.parakeet_model if self.engine == "parakeet" else self.model
 
 
 def load_config(path: Path = CONFIG_PATH) -> AppConfig:
@@ -73,8 +79,12 @@ def load_config(path: Path = CONFIG_PATH) -> AppConfig:
 
 
 def validate_config(config: AppConfig, path: Path = CONFIG_PATH) -> None:
+    if config.engine not in {"whisper", "parakeet"}:
+        raise ValueError(f"{path}: engine must be 'whisper' or 'parakeet'")
     if config.hotkey != "right_option":
         raise ValueError(f"{path}: only hotkey = 'right_option' is supported")
+    if config.parakeet_beam_size < 1 or config.parakeet_beam_size > 5:
+        raise ValueError(f"{path}: parakeet_beam_size must be between 1 and 5")
     if config.mode not in {"hold", "toggle"}:
         raise ValueError(f"{path}: mode must be 'hold' or 'toggle'")
     if config.paste_mode not in {"clipboard", "keystroke"}:
@@ -102,10 +112,12 @@ def validate_config(config: AppConfig, path: Path = CONFIG_PATH) -> None:
 def as_toml(config: AppConfig | None = None) -> str:
     config = config or AppConfig()
     values: dict[str, Any] = {
+        "engine": config.engine,
         "hotkey": config.hotkey,
         "mode": config.mode,
         "model": config.model,
         "parakeet_model": config.parakeet_model,
+        "parakeet_beam_size": config.parakeet_beam_size,
         "language": config.language,
         "sounds": config.sounds,
         "paste_mode": config.paste_mode,

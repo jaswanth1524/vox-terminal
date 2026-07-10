@@ -2224,16 +2224,12 @@ dependencies = [
     { name = "huggingface-hub" },
     { name = "mlx-whisper" },
     { name = "numpy" },
+    { name = "parakeet-mlx" },
     { name = "pynput" },
     { name = "pyobjc-framework-quartz" },
     { name = "rumps" },
     { name = "silero-vad" },
     { name = "sounddevice" },
-]
-
-[package.optional-dependencies]
-benchmark = [
-    { name = "parakeet-mlx" },
 ]
 
 [package.dev-dependencies]
@@ -2250,14 +2246,13 @@ requires-dist = [
     { name = "huggingface-hub" },
     { name = "mlx-whisper" },
     { name = "numpy" },
-    { name = "parakeet-mlx", marker = "extra == 'benchmark'" },
+    { name = "parakeet-mlx", specifier = "==0.5.2" },
     { name = "pynput" },
     { name = "pyobjc-framework-quartz" },
     { name = "rumps" },
     { name = "silero-vad" },
     { name = "sounddevice" },
 ]
-provides-extras = ["benchmark"]
 
 [package.metadata.requires-dev]
 build = [
