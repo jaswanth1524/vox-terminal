@@ -2,6 +2,21 @@ from __future__ import annotations
 
 import shutil
 import sys
+from pathlib import Path
+
+
+def permission_target_description(
+    *,
+    executable: str | None = None,
+    frozen: bool | None = None,
+) -> str:
+    executable_path = Path(executable or sys.executable)
+    is_frozen = getattr(sys, "frozen", False) if frozen is None else frozen
+    if is_frozen and len(executable_path.parents) >= 3:
+        app_path = executable_path.parents[2]
+        if app_path.suffix == ".app":
+            return str(app_path)
+    return "the launching terminal app and virtual-environment Python"
 
 
 def check_microphone() -> tuple[bool, str]:
@@ -34,9 +49,8 @@ def print_permission_instructions() -> None:
     print("2. System Settings -> Privacy & Security -> Accessibility")
     print("3. System Settings -> Privacy & Security -> Input Monitoring")
     print()
-    print("Grant these to the binary or app that launches Vox Terminal.")
+    print(f"Grant these to: {permission_target_description()}")
     print(f"Current Python binary: {sys.executable}")
-    print("If launched from a terminal, also grant the terminal app itself.")
     print("Input Monitoring cannot be verified noninteractively; Vox Terminal warns at startup")
     print("if the global keyboard listener receives no events.")
 

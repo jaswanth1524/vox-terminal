@@ -6,22 +6,58 @@ memory, normal transcription is forced offline, and no transcript is uploaded.
 
 ## Requirements
 
-- macOS on Apple Silicon
-- Python 3.11+
-- `uv`
+- macOS 13 or newer on Apple Silicon (arm64)
+- Python 3.11+ and [`uv`](https://docs.astral.sh/uv/) 0.8.11+ when building from source
 - PortAudio, if `sounddevice` cannot find an input backend: `brew install portaudio`
 
-## Install the Local App
+Intel Macs, Linux, and Windows are not supported. Speech models are intentionally
+not included in the app or release archive.
+
+## Download a Release
+
+Download the arm64 ZIP and matching `.sha256` file from the repository's Releases
+page. Keep both files in the same directory, then verify and extract them:
 
 ```sh
+shasum -a 256 -c Vox-Terminal-*-macOS-arm64.sha256
+ditto -x -k Vox-Terminal-*-macOS-arm64.zip .
+mkdir -p "$HOME/Applications"
+mv "Vox Terminal.app" "$HOME/Applications/"
+```
+
+Notarized releases open normally. An ad-hoc-signed beta may be blocked by
+Gatekeeper: control-click the app and choose Open, then confirm it under System
+Settings -> Privacy & Security -> Open Anyway. Verify the checksum before doing
+this; never bypass Gatekeeper for an unverified archive.
+
+## Build from a Clean Clone
+
+```sh
+git clone https://github.com/jaswanth1524/vox-terminal.git
+cd vox-terminal
 make setup
+make verify
 make install
 ```
 
-The build creates an arm64, ad-hoc-signed app at `dist/Vox Terminal.app` and copies
-it to `~/Applications`. Launch it from Finder. On first launch, Vox Terminal checks
-the local Hugging Face cache and offers to download the selected speech model if
-needed. That explicit setup step is the only online app operation.
+`make setup` validates macOS and arm64, then synchronizes a Python 3.11 environment
+from the exact `uv.lock` in frozen mode. `make verify` runs lint, tests, a production build,
+the frozen-app self-test, architecture and signature checks, and the 300 MB bundle
+limit. `make install` copies the ad-hoc-signed app to your personal Applications
+folder at `~/Applications`, not the system-wide `/Applications` folder. Run
+`open -R "$HOME/Applications/Vox Terminal.app"` to reveal it in Finder.
+
+The lock intentionally omits Torch, SciPy, Numba, Librosa, and scikit-learn.
+The pinned speech engines declare those optional stacks unconditionally, while Vox
+Terminal provides the small mel-filter and disabled word-timing APIs it actually uses.
+When upgrading either engine pin, update its dependency metadata in `pyproject.toml`
+and verify both engine imports before regenerating `uv.lock`.
+
+Launch from Finder. On first launch, Vox Terminal checks the local Hugging Face
+cache and asks before starting the selected model download. That single-use
+provisioning process is the only component allowed to connect externally. After
+the model is cached, startup, recording, transcription, paste, diagnostics, and
+performance reporting remain offline.
 
 ## macOS Permissions
 
@@ -34,7 +70,22 @@ Open System Settings -> Privacy & Security and grant:
 2. Accessibility: required to synthesize Cmd+V.
 3. Input Monitoring: required for the global Right Option hotkey.
 
-If the hotkey listener sees no keyboard events shortly after startup, Vox Terminal prints an Input Monitoring warning. Secure input fields, such as password prompts, may block synthetic paste events.
+If the hotkey listener sees no keyboard events shortly after startup, Vox Terminal
+prints an Input Monitoring warning. Grant permissions to the exact installed app at
+`~/Applications/Vox Terminal.app`; grant Terminal and virtual-environment Python
+only when running the developer CLI. Secure input fields, such as password prompts,
+may block synthetic paste events.
+
+Replacing an ad-hoc-signed local build can change its macOS code identity and leave
+privacy toggles looking enabled while no longer matching the executable. Quit the
+app, remove and re-add the exact installed bundle under Accessibility and Input
+Monitoring, then relaunch it. If macOS retains stale entries, reset only this app:
+
+```sh
+tccutil reset Accessibility com.jaswanth.voxterminal
+tccutil reset ListenEvent com.jaswanth.voxterminal
+tccutil reset Microphone com.jaswanth.voxterminal
+```
 
 ## Usage
 
@@ -91,12 +142,13 @@ The History menu item shows recent pasted transcripts for the current process on
 Create `~/.config/dictate/config.toml` to override defaults:
 
 ```toml
-engine = "whisper"
+engine = "parakeet"
 hotkey = "right_option"
 mode = "hold"
 model = "mlx-community/whisper-large-v3-turbo"
 parakeet_model = "mlx-community/parakeet-tdt-0.6b-v2"
-parakeet_beam_size = 1
+parakeet_beam_size = 2
+parakeet_quantization_bits = 3
 language = "en"
 sounds = true
 paste_mode = "clipboard"
@@ -117,11 +169,19 @@ Recordings shorter than `min_recording_ms` are ignored. Recordings are capped at
 
 `custom_vocabulary` is appended to Whisper's `initial_prompt` as vocabulary hints. This improves recognition of project-specific terms without sending audio or prompts off-machine.
 
-`engine = "whisper"` remains the accuracy-first default. Set `engine = "parakeet"`
-or select Parakeet in Settings for substantially lower English latency. Only the
-selected engine is loaded into memory; cached models are retained for switching.
+Parakeet two-beam decoding is the new-install default for fast, accurate English dictation.
+Set `engine = "whisper"` or select Whisper in Settings for multilingual and
+accuracy-first use. An existing explicit engine setting is preserved. Only the
+selected engine is loaded into memory. Parakeet uses local 3-bit MLX weight
+quantization by default to reduce GPU memory and improve inference speed; set
+`parakeet_quantization_bits = 0` to disable it, or choose `4` or `8` for a
+different accuracy/memory tradeoff. Two-bit mode is rejected because it causes
+severe accuracy loss on the repository corpus.
 
-When `mode = "toggle"` and `vad_auto_stop = true`, Silero VAD watches the in-memory recording and stops automatically after speech is followed by `vad_silence_seconds` of silence.
+When `mode = "toggle"` and `vad_auto_stop = true`, a bounded streaming energy
+detector adapts to the local noise floor and stops after speech is followed by
+`vad_silence_seconds` of silence. It retains counters and one partial analysis
+frame, not a second copy of the recording.
 
 ## Development
 
@@ -130,24 +190,48 @@ make lint       # Ruff static checks
 make test       # deterministic unit suite
 make app        # standalone .app bundle
 make install    # build, sign, and copy to ~/Applications
+make verify     # all source and release bundle gates
+make performance PERFORMANCE_ITERATIONS=100  # cached-model latency/memory audit
+make release    # versioned ZIP, checksum, and dependency report
 ```
 
 `uv run python -m dictate --no-menubar` remains available for foreground debugging.
 Use `uv run python -m dictate --doctor` for terminal diagnostics and
 `uv run python -m dictate --download-model` for an explicit CLI model download.
+The performance audit reports cold load time, warm p50/p95 inference from the
+first 20 utterances, macOS physical footprint including GPU allocations,
+100-dictation memory growth, and bundle size. It
+requires the Parakeet model to be cached and returns a nonzero status when a
+budget fails. The release limits are 500/750 ms p50/p95, 1.5 GiB physical
+footprint, 100 MiB soak growth, and a 300 MiB app bundle.
+
+## Publishing Releases
+
+`pyproject.toml` is the single version source for package metadata, the app bundle,
+and release filenames. A `v<version>` tag runs the arm64 release workflow. It
+publishes a versioned ZIP, SHA-256 checksum, locked dependency report, SPDX 2.3 JSON
+SBOM derived from the frozen bundle analysis, and GitHub provenance attestation.
+With no Apple secrets it produces an ad-hoc-signed
+beta. For Developer ID signing and notarization, configure all six repository
+secrets: `MACOS_CERTIFICATE_BASE64`, `MACOS_CERTIFICATE_PASSWORD`,
+`MACOS_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, and
+`APPLE_APP_SPECIFIC_PASSWORD`. Partial configuration fails instead of silently
+publishing a misleading build; see `.github/workflows/release.yml` for the exact flow.
 
 ## Benchmarking
 
-Run the deterministic 20-phrase latency and accuracy promotion gate:
+Run the deterministic 20-phrase release latency and accuracy gate:
 
 ```sh
 make benchmark
 ```
 
 The benchmark synthesizes temporary English audio, runs cached models offline, and
-reports p50, p95, WER, and whether Parakeet meets the default-engine gate. Temporary
-audio is deleted when the command exits. Use `--parakeet-only` to test Parakeet
-without re-running Whisper. Run
+reports p50, p95, WER, the latency-first fast-default gate, and the release gate that
+allows at most two percentage points of WER regression from Whisper. The command
+exits successfully only when that stricter release gate passes. Temporary audio is
+deleted when the command exits. Use
+`--parakeet-only` to test Parakeet without re-running Whisper. Run
 `uv run python scripts/benchmark_latency.py --interactive` for ten prompted,
 user-spoken comparisons; captured audio remains in memory and is discarded.
 
@@ -165,11 +249,13 @@ The MLX integration test is opt-in because it requires a cached model:
 DICTATE_RUN_MLX_TESTS=1 uv run python -m unittest tests.test_transcriber
 ```
 
-## Privacy Notes
+## Privacy and Offline Operation
 
-Vox Terminal sets Hugging Face offline environment variables during normal runtime.
-If the selected model is missing from `~/.cache/huggingface`, the app requests an
-explicit download instead of silently using the network. Dictation audio is held
-in memory as NumPy arrays and is never written to disk. Performance history stores
-only the selected engine and numeric stage timings; it does not contain recordings,
+Normal runtime installs a process-wide outbound socket guard before model libraries
+are imported and sets Hugging Face offline mode. If the selected model is missing
+from `~/.cache/huggingface`, the app requests consent and launches a separate,
+single-use provisioning subprocess; it never silently falls back to the network.
+There is no telemetry, analytics, update check, remote transcription API, or crash
+reporting. Dictation audio stays in memory and is never written to disk. Performance
+history contains only engine names and numeric stage timings—never recordings,
 transcripts, prompts, or target-app details.

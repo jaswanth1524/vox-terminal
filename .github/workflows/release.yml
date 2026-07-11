@@ -1,0 +1,142 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    name: Build macOS arm64 release
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.11"
+          enable-cache: true
+
+      - name: Synchronize locked environment
+        run: make setup
+
+      - name: Validate release tag
+        if: github.event_name == 'push'
+        run: |
+          expected_tag="v$(.venv/bin/python scripts/project_version.py)"
+          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match project version $expected_tag." >&2
+            exit 1
+          fi
+
+      - name: Configure optional Developer ID certificate
+        shell: bash
+        env:
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          configured=0
+          for value in \
+            "$MACOS_CERTIFICATE_BASE64" \
+            "$MACOS_CERTIFICATE_PASSWORD" \
+            "$MACOS_SIGNING_IDENTITY" \
+            "$APPLE_ID" \
+            "$APPLE_TEAM_ID" \
+            "$APPLE_APP_SPECIFIC_PASSWORD"; do
+            if [[ -n "$value" ]]; then
+              configured=$((configured + 1))
+            fi
+          done
+
+          if [[ "$configured" -eq 0 ]]; then
+            echo "CODESIGN_IDENTITY=-" >> "$GITHUB_ENV"
+            echo "NOTARIZE_RELEASE=0" >> "$GITHUB_ENV"
+            echo "No Apple credentials configured; producing an ad-hoc-signed release."
+            exit 0
+          fi
+
+          if [[ "$configured" -ne 6 ]]; then
+            echo "Apple release secrets are partially configured; refusing an ambiguous release." >&2
+            exit 1
+          fi
+
+          certificate_path="$RUNNER_TEMP/vox-terminal-release.p12"
+          keychain_path="$RUNNER_TEMP/vox-terminal-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+
+          printf '%s' "$MACOS_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" \
+            -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$keychain_path"
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -k "$keychain_password" \
+            "$keychain_path"
+          security list-keychain -d user -s "$keychain_path"
+          rm -f "$certificate_path"
+
+          echo "CODESIGN_IDENTITY=$MACOS_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          echo "NOTARIZE_RELEASE=1" >> "$GITHUB_ENV"
+          echo "SIGNING_KEYCHAIN_PATH=$keychain_path" >> "$GITHUB_ENV"
+
+      - name: Run source and bundle verification
+        run: make verify
+
+      - name: Notarize and staple Developer ID build
+        if: env.NOTARIZE_RELEASE == '1'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          sh scripts/notarize_app.sh
+          REQUIRE_GATEKEEPER=1 make release-check
+
+      - name: Package release files
+        run: sh scripts/package_release.sh
+
+      - name: Attest release files
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/release/*"
+
+      - name: Publish GitHub release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/release/* \
+            --generate-notes \
+            --title "Vox Terminal $GITHUB_REF_NAME" \
+            --verify-tag
+
+      - name: Upload workflow artifacts
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vox-terminal-macos-arm64
+          path: dist/release/*
+          if-no-files-found: error
+
+      - name: Remove temporary signing keychain
+        if: always() && env.SIGNING_KEYCHAIN_PATH != ''
+        run: security delete-keychain "$SIGNING_KEYCHAIN_PATH"

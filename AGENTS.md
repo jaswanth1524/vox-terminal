@@ -12,10 +12,12 @@ Keep implementation out of the repository root except for standard entry points 
 
 ## Build, Test, and Development Commands
 
-- `make setup` synchronizes runtime, lint, and app-build dependencies with `uv`.
+- `make setup` validates macOS/arm64 and synchronizes `uv.lock` in frozen mode.
 - `make lint` runs Ruff without rewriting files.
 - `make test` runs the complete unit suite; `make benchmark` runs the offline engine-promotion gate.
 - `make app` builds `dist/Vox Terminal.app`; `make install` copies and ad-hoc signs it in `~/Applications`.
+- `make verify` runs source and release gates; `make performance` audits a cached model's latency and memory.
+- `make release` emits the versioned ZIP, checksum, dependency report, and SPDX JSON SBOM.
 - `uv run python -m dictate --no-menubar` runs the foreground debugging service.
 
 ## Coding Style & Naming Conventions
@@ -34,3 +36,4 @@ History uses Conventional Commit-style subjects such as `feat: add VAD auto-stop
 
 Never commit recordings, transcripts, latency reports, credentials, model caches, `.venv`, `build/`, or `dist/`. Normal runtime must stay offline; network access is allowed only after explicit user action for model provisioning. Preserve the existing config path and migration behavior.
 Runtime performance data belongs under `~/Library/Application Support/Vox Terminal/` and must contain numeric timings only—never audio, transcript text, prompts, or application names.
+Keep release signing secrets in GitHub Actions only. `pyproject.toml` is the single version source; a release tag must be `v<project version>`.

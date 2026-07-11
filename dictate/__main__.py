@@ -7,18 +7,25 @@ import subprocess
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 
-from .config import AppConfig, load_config
-from .engines import TranscriptionEngine, build_engine
-from .history import TranscriptHistory
-from .hotkey import HotkeyCallbacks, RightOptionHoldListener
-from .injector import InjectionError, TextInjector, build_injector
-from .latency import LatencyHistory, LatencySample
-from .paths import DEFAULT_PATHS
-from .postprocess import clean_transcript
-from .recorder import AudioCaptureError, Recorder, Recording
-from .transcriber import ModelUnavailableError
-from .vad import SileroVadAutoStop
+from .network import install_runtime_network_policy, is_provisioning_process
+
+# This must run before importing engine and Hugging Face-adjacent modules.
+install_runtime_network_policy()
+
+from .config import AppConfig, load_config  # noqa: E402
+from .doctor import permission_target_description  # noqa: E402
+from .engines import TranscriptionEngine, build_engine  # noqa: E402
+from .history import TranscriptHistory  # noqa: E402
+from .hotkey import HotkeyCallbacks, RightOptionHoldListener  # noqa: E402
+from .injector import InjectionError, TextInjector, build_injector  # noqa: E402
+from .latency import LatencyHistory, LatencySample  # noqa: E402
+from .paths import DEFAULT_PATHS  # noqa: E402
+from .postprocess import clean_transcript  # noqa: E402
+from .recorder import AudioCaptureError, Recorder, Recording  # noqa: E402
+from .transcriber import ModelUnavailableError  # noqa: E402
+from .vad import StreamingEnergyVad  # noqa: E402
 
 START_SOUND = "/System/Library/Sounds/Tink.aiff"
 STOP_SOUND = "/System/Library/Sounds/Pop.aiff"
@@ -40,7 +47,33 @@ def main() -> int:
     parser.add_argument(
         "--download-model",
         action="store_true",
-        help="explicitly download and warm the configured model",
+        help="explicitly download the configured model in a temporary online process",
+    )
+    parser.add_argument(
+        "--performance-audit",
+        action="store_true",
+        help="measure local latency, memory growth, and app bundle size",
+    )
+    parser.add_argument("--iterations", type=int, default=100, help=argparse.SUPPRESS)
+    parser.add_argument("--app-path", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--provision-model",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--engine",
+        choices=("whisper", "parakeet"),
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--model",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--language",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--self-test",
@@ -50,20 +83,58 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.self_test:
-        from . import menubar, settings
+        from . import __version__, menubar, settings
 
         del menubar, settings
-        print("Vox Terminal app bundle self-test: OK")
+        if __version__ == "0+unknown":
+            logging.error("Vox Terminal package metadata is missing from the app bundle.")
+            return 1
+        print(f"Vox Terminal {__version__} app bundle self-test: OK")
         return 0
 
     from .logging_config import configure_logging
 
-    configure_logging(foreground=args.no_menubar or args.doctor)
+    configure_logging(
+        foreground=(
+            args.no_menubar
+            or args.doctor
+            or args.download_model
+            or args.provision_model
+            or args.performance_audit
+        )
+    )
+
+    if args.provision_model:
+        if not is_provisioning_process():
+            logging.error("Refusing unauthorized model provisioning process.")
+            return 2
+        if args.engine is None or args.model is None or args.language is None:
+            logging.error("Provisioning requires an engine, model, and language.")
+            return 2
+        from .model_manager import provision_model
+
+        try:
+            provision_model(args.engine, args.model, args.language)
+        except Exception as exc:
+            logging.error("Model download failed: %s", exc)
+            return 1
+        print("Model is available in the local cache.")
+        return 0
 
     if args.doctor:
         from .doctor import main as doctor_main
 
         return doctor_main()
+
+    if args.performance_audit:
+        from .performance_audit import main as performance_main
+
+        audit_args = ["--iterations", str(args.iterations)]
+        if args.app_path is not None:
+            audit_args.extend(["--app-path", str(args.app_path)])
+        if args.json:
+            audit_args.append("--json")
+        return performance_main(audit_args)
 
     try:
         config = load_config()
@@ -74,7 +145,16 @@ def main() -> int:
     if args.download_model:
         from .model_manager import ModelManager
 
-        ModelManager(config.model, config.language).download()
+        manager = ModelManager(
+            config.engine,
+            config.selected_model,
+            config.language,
+        )
+        try:
+            manager.download()
+        except Exception as exc:
+            logging.error("Model download failed: %s", exc)
+            return 1
         print("Model is available in the local cache.")
         return 0
 
@@ -107,7 +187,7 @@ class DictateService:
         transcriber: TranscriptionEngine | None = None,
         injector: TextInjector | None = None,
         history: TranscriptHistory | None = None,
-        vad_auto_stop: SileroVadAutoStop | None = None,
+        vad_auto_stop: StreamingEnergyVad | None = None,
         latency_history: LatencyHistory | None = None,
     ) -> None:
         self.config = config
@@ -119,9 +199,10 @@ class DictateService:
         )
         self.history = history or TranscriptHistory(config.history_size)
         self.latency_history = latency_history or LatencyHistory()
-        self.vad_auto_stop = vad_auto_stop or SileroVadAutoStop(
+        self.vad_auto_stop = vad_auto_stop or StreamingEnergyVad(
             silence_seconds=config.vad_silence_seconds,
             min_speech_seconds=config.vad_min_speech_seconds,
+            speech_rms_threshold=config.silence_rms_threshold,
         )
         self._status_callback = status_callback
         self._status = "stopped"
@@ -206,6 +287,10 @@ class DictateService:
         with self._recording_lock:
             if self.recorder.is_recording:
                 self.recorder.stop()
+        with self._transcribing:
+            close = getattr(self.transcriber, "close", None)
+            if close is not None:
+                close()
         self._set_status("stopped")
 
     def history_text(self) -> str:
@@ -246,6 +331,7 @@ class DictateService:
             if self.recorder.is_recording:
                 return
             try:
+                self.vad_auto_stop.reset()
                 self.recorder.start()
             except AudioCaptureError as exc:
                 logging.error("%s", exc)
@@ -339,10 +425,10 @@ class DictateService:
             if not self.recorder.is_recording:
                 return
             try:
-                recording = self.recorder.snapshot()
-                decision = self.vad_auto_stop.decide(
-                    recording.audio,
-                    sample_rate=recording.sample_rate,
+                new_audio = self.recorder.read_new_audio()
+                decision = self.vad_auto_stop.process(
+                    new_audio,
+                    sample_rate=self.recorder.sample_rate,
                 )
             except Exception as exc:
                 logging.warning("VAD auto-stop failed; continuing recording: %s", exc)
@@ -437,7 +523,8 @@ class DictateService:
     def _warn_input_monitoring(self) -> None:
         logging.warning(
             "No keyboard events observed. If Right Option does not work, grant "
-            "Input Monitoring to the launching terminal app and venv Python."
+            "Input Monitoring to %s.",
+            permission_target_description(),
         )
 
     def _set_status(self, status: str) -> None:

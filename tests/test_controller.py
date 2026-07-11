@@ -50,8 +50,10 @@ class FakeModelManager:
         self.available = available
         self.callback = callback
         self.downloads = 0
+        self.checks = 0
 
     def is_available(self) -> bool:
+        self.checks += 1
         if not self.available:
             self.callback(ModelState.MISSING)
         return self.available
@@ -99,6 +101,64 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(len(services), 2)
             self.assertEqual(services[0].stops, 1)
             self.assertEqual(controller.status, "idle")
+
+    def test_download_rechecks_cache_then_starts_service(self) -> None:
+        services: list[FakeService] = []
+        manager = FakeModelManager(False, lambda _state: None)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            controller = AppController(
+                config_path=Path(temp_dir) / "config.toml",
+                service_factory=lambda config: services.append(FakeService(config)) or services[-1],
+                model_manager_factory=lambda _engine, _model, _language, callback: manager,
+            )
+
+            self.assertTrue(controller.download_and_start())
+
+        self.assertEqual(manager.downloads, 1)
+        self.assertEqual(manager.checks, 1)
+        self.assertEqual(len(services), 1)
+        self.assertEqual(controller.status, "idle")
+
+    def test_download_failure_does_not_start_service(self) -> None:
+        services: list[FakeService] = []
+
+        class FailingModelManager(FakeModelManager):
+            def download(self) -> None:
+                raise RuntimeError("child failed")
+
+        manager = FailingModelManager(False, lambda _state: None)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            controller = AppController(
+                config_path=Path(temp_dir) / "config.toml",
+                service_factory=lambda config: services.append(FakeService(config)) or services[-1],
+                model_manager_factory=lambda _engine, _model, _language, callback: manager,
+            )
+
+            self.assertFalse(controller.download_and_start())
+
+        self.assertEqual(controller.status, "error")
+        self.assertIn("child failed", controller.last_error or "")
+        self.assertEqual(services, [])
+
+    def test_failed_service_start_is_stopped_to_release_model_memory(self) -> None:
+        services: list[FakeService] = []
+        manager = FakeModelManager(True, lambda _state: None)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            controller = AppController(
+                config_path=Path(temp_dir) / "config.toml",
+                service_factory=lambda config: services.append(
+                    FakeService(config, starts=False)
+                )
+                or services[-1],
+                model_manager_factory=lambda _engine, _model, _language, callback: manager,
+            )
+
+            self.assertFalse(controller.start())
+
+        self.assertEqual(services[0].stops, 1)
+        self.assertEqual(controller.status, "error")
 
     def test_performance_data_is_forwarded_to_service(self) -> None:
         services: list[FakeService] = []

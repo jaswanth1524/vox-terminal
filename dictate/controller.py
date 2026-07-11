@@ -96,11 +96,16 @@ class AppController:
 
         with self._lifecycle_lock:
             self.last_error = None
+            manager = self._model_manager()
             try:
-                self._model_manager().download()
+                manager.download()
             except Exception as exc:
                 self.last_error = f"Model setup failed: {exc}"
                 logging.exception(self.last_error)
+                self._set_status("error")
+                return False
+            if not manager.is_available():
+                self.last_error = "Model setup finished, but the model is not locally available."
                 self._set_status("error")
                 return False
             return self._start_service()
@@ -156,6 +161,8 @@ class AppController:
         if service.start():
             return True
         self.last_error = getattr(service, "last_error", None) or "Vox Terminal could not start."
+        service.stop()
+        self._service = None
         self._set_status("error")
         return False
 

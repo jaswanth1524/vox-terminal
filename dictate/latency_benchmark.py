@@ -61,11 +61,25 @@ def should_promote_parakeet(
     whisper: EngineBenchmark,
     parakeet: EngineBenchmark,
 ) -> bool:
+    """Return whether Parakeet also stays within two WER points of Whisper."""
+
     return (
-        parakeet.p50_ms <= 1_000
-        and parakeet.p95_ms <= 2_000
-        and parakeet.p95_ms < whisper.p95_ms
+        meets_fast_default_gate(whisper, parakeet)
         and parakeet.word_error_rate <= whisper.word_error_rate + 0.02
+    )
+
+
+def meets_fast_default_gate(
+    whisper: EngineBenchmark,
+    parakeet: EngineBenchmark,
+) -> bool:
+    """Return whether Parakeet is suitable as the latency-first English default."""
+
+    return (
+        parakeet.p50_ms <= 500
+        and parakeet.p95_ms <= 750
+        and parakeet.p95_ms < whisper.p95_ms
+        and parakeet.word_error_rate <= 0.15
     )
 
 

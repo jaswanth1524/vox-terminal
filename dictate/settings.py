@@ -20,6 +20,11 @@ from Foundation import NSObject
 
 from .config import AppConfig, validate_config
 
+ENGINE_TITLES = {
+    "parakeet": "Parakeet — Fast English",
+    "whisper": "Whisper — Multilingual",
+}
+
 
 def _label(text: str, x: float, y: float, width: float = 130) -> NSTextField:
     label = NSTextField.labelWithString_(text)
@@ -62,8 +67,8 @@ class SettingsDialog:
         self.engine = NSPopUpButton.alloc().initWithFrame_pullsDown_(
             NSMakeRect(170, 418, 290, 26), False
         )
-        self.engine.addItemsWithTitles_(["Parakeet", "Whisper"])
-        self.engine.selectItemWithTitle_(config.engine.title())
+        self.engine.addItemsWithTitles_(list(ENGINE_TITLES.values()))
+        self.engine.selectItemWithTitle_(ENGINE_TITLES[config.engine])
         content.addSubview_(self.engine)
 
         content.addSubview_(_label("Recording mode", 24, 374))
@@ -148,7 +153,11 @@ class SettingsDialog:
         )
         updated = replace(
             self.config,
-            engine=str(self.engine.titleOfSelectedItem()).lower(),
+            engine=next(
+                key
+                for key, title in ENGINE_TITLES.items()
+                if title == str(self.engine.titleOfSelectedItem())
+            ),
             mode=str(self.mode.titleOfSelectedItem()).lower(),
             language=str(self.language.stringValue()).strip() or "en",
             paste_mode=str(self.paste_mode.titleOfSelectedItem()).lower(),

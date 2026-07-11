@@ -13,16 +13,18 @@ from .paths import DEFAULT_PATHS
 CONFIG_PATH = DEFAULT_PATHS.config
 DEFAULT_MODEL = "mlx-community/whisper-large-v3-turbo"
 DEFAULT_PARAKEET_MODEL = "mlx-community/parakeet-tdt-0.6b-v2"
+DEFAULT_PARAKEET_BEAM_SIZE = 2
 
 
 @dataclass(frozen=True)
 class AppConfig:
-    engine: str = "whisper"
+    engine: str = "parakeet"
     hotkey: str = "right_option"
     mode: str = "hold"
     model: str = DEFAULT_MODEL
     parakeet_model: str = DEFAULT_PARAKEET_MODEL
-    parakeet_beam_size: int = 1
+    parakeet_beam_size: int = DEFAULT_PARAKEET_BEAM_SIZE
+    parakeet_quantization_bits: int = 3
     language: str = "en"
     sounds: bool = True
     paste_mode: str = "clipboard"
@@ -85,6 +87,8 @@ def validate_config(config: AppConfig, path: Path = CONFIG_PATH) -> None:
         raise ValueError(f"{path}: only hotkey = 'right_option' is supported")
     if config.parakeet_beam_size < 1 or config.parakeet_beam_size > 5:
         raise ValueError(f"{path}: parakeet_beam_size must be between 1 and 5")
+    if config.parakeet_quantization_bits not in {0, 3, 4, 8}:
+        raise ValueError(f"{path}: parakeet_quantization_bits must be 0, 3, 4, or 8")
     if config.mode not in {"hold", "toggle"}:
         raise ValueError(f"{path}: mode must be 'hold' or 'toggle'")
     if config.paste_mode not in {"clipboard", "keystroke"}:
@@ -118,6 +122,7 @@ def as_toml(config: AppConfig | None = None) -> str:
         "model": config.model,
         "parakeet_model": config.parakeet_model,
         "parakeet_beam_size": config.parakeet_beam_size,
+        "parakeet_quantization_bits": config.parakeet_quantization_bits,
         "language": config.language,
         "sounds": config.sounds,
         "paste_mode": config.paste_mode,

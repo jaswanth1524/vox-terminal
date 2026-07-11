@@ -1,25 +1,39 @@
-.PHONY: setup lint test benchmark icon app install clean
+PERFORMANCE_ITERATIONS ?= 100
+
+.PHONY: setup lint test benchmark performance icon app install release-check verify release clean
 
 setup:
-	uv sync --group dev --group build
+	sh scripts/bootstrap.sh
 
 lint:
-	uv run --group dev ruff check .
+	uv run --frozen --group dev ruff check .
 
 test:
-	uv run python -m unittest discover -s tests
+	uv run --frozen python -m unittest discover -s tests
 
 benchmark:
-	uv run python scripts/benchmark_latency.py
+	uv run --frozen python scripts/benchmark_latency.py
+
+performance:
+	uv run --frozen python scripts/performance_audit.py --iterations $(PERFORMANCE_ITERATIONS)
 
 icon:
 	sh scripts/build_icon.sh
 
 app: icon
-	uv run --group build pyinstaller --clean --noconfirm VoxTerminal.spec
+	uv run --frozen --group build pyinstaller --clean --noconfirm VoxTerminal.spec
+	sh scripts/sign_app.sh
 
 install: app
 	sh scripts/install_app.sh
+
+release-check:
+	sh scripts/verify_app.sh
+
+verify: lint test app release-check
+
+release: app release-check
+	sh scripts/package_release.sh
 
 clean:
 	rm -rf build dist

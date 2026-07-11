@@ -1,18 +1,17 @@
 [project]
 name = "vox-terminal"
-version = "0.1.0"
+version = "0.3.0"
 description = "Local macOS push-to-talk dictation for terminals and apps"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "huggingface-hub",
-    "mlx-whisper",
+    "mlx-whisper==0.4.3",
     "numpy",
     "parakeet-mlx==0.5.2",
     "pynput",
     "pyobjc-framework-Quartz",
     "rumps",
-    "silero-vad",
     "sounddevice",
 ]
 
@@ -25,6 +24,32 @@ build-backend = "setuptools.build_meta"
 
 [tool.uv]
 package = true
+
+# These pinned engines declare optional scientific stacks unconditionally.
+# Vox Terminal supplies the narrow APIs it uses in dictate/mel.py and
+# dictate/lightweight_imports.py, so keep this metadata aligned with the pins.
+[[tool.uv.dependency-metadata]]
+name = "mlx-whisper"
+version = "0.4.3"
+requires-dist = [
+    "huggingface-hub",
+    "mlx>=0.11",
+    "more-itertools",
+    "numpy",
+    "tiktoken",
+    "tqdm",
+]
+
+[[tool.uv.dependency-metadata]]
+name = "parakeet-mlx"
+version = "0.5.2"
+requires-dist = [
+    "dacite>=1.9.2",
+    "huggingface-hub>=0.30.2",
+    "mlx>=0.22.1",
+    "numpy>=2.2.5",
+    "typer>=0.15.3",
+]
 
 [dependency-groups]
 build = ["pillow>=11", "pyinstaller>=6.14"]

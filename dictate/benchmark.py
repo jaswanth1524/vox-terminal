@@ -8,8 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .config import DEFAULT_MODEL, DEFAULT_PARAKEET_MODEL, load_config
-from .transcriber import Transcriber, configure_offline_mode
+from .network import install_runtime_network_policy
+
+# Benchmarks exercise exactly the same offline network policy as the app.
+install_runtime_network_policy()
+
+from .config import DEFAULT_MODEL, DEFAULT_PARAKEET_MODEL, load_config  # noqa: E402
+from .mel import install_parakeet_librosa_shim  # noqa: E402
+from .transcriber import Transcriber  # noqa: E402
 
 Clock = Callable[[], float]
 ParakeetLoader = Callable[[str], Any]
@@ -43,15 +49,13 @@ def benchmark_whisper(
     *,
     model: str = DEFAULT_MODEL,
     language: str = "en",
-    offline: bool = True,
     clock: Clock = time.perf_counter,
     transcriber: Transcriber | None = None,
 ) -> BenchmarkResult:
-    configure_offline_mode(offline=offline)
     transcriber = transcriber or Transcriber(
         model=model,
         language=language,
-        offline=offline,
+        offline=True,
     )
     load_start = clock()
     transcriber.load()
@@ -73,11 +77,9 @@ def benchmark_parakeet(
     audio_path: Path,
     *,
     model: str = DEFAULT_PARAKEET_MODEL,
-    offline: bool = True,
     clock: Clock = time.perf_counter,
     loader: ParakeetLoader | None = None,
 ) -> BenchmarkResult:
-    configure_offline_mode(offline=offline)
     loader = loader or _load_parakeet
 
     load_start = clock()
@@ -97,12 +99,8 @@ def benchmark_parakeet(
     )
 
 
-def download_parakeet_model(model: str = DEFAULT_PARAKEET_MODEL) -> None:
-    configure_offline_mode(offline=False)
-    _load_parakeet(model)
-
-
 def _load_parakeet(model: str) -> Any:
+    install_parakeet_librosa_shim()
     from parakeet_mlx import from_pretrained
 
     return from_pretrained(model)
@@ -122,29 +120,12 @@ def main() -> int:
     parser.add_argument("--language", default=config.language)
     parser.add_argument("--skip-whisper", action="store_true")
     parser.add_argument("--skip-parakeet", action="store_true")
-    parser.add_argument(
-        "--online",
-        action="store_true",
-        help="allow model download during this benchmark run",
-    )
-    parser.add_argument(
-        "--download-parakeet",
-        action="store_true",
-        help="download and warm the configured Parakeet model, then exit",
-    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
-
-    if args.download_parakeet:
-        print(f"Downloading and warming Parakeet model: {args.parakeet_model}")
-        download_parakeet_model(args.parakeet_model)
-        print("Parakeet model is available in the local cache.")
-        return 0
 
     if not args.audio.exists():
         parser.error(f"audio file does not exist: {args.audio}")
 
-    offline = not args.online
     results: list[BenchmarkResult] = []
     if not args.skip_whisper:
         results.append(
@@ -152,7 +133,6 @@ def main() -> int:
                 args.audio,
                 model=args.whisper_model,
                 language=args.language,
-                offline=offline,
             )
         )
     if not args.skip_parakeet:
@@ -160,7 +140,6 @@ def main() -> int:
             benchmark_parakeet(
                 args.audio,
                 model=args.parakeet_model,
-                offline=offline,
             )
         )
 

@@ -5,6 +5,7 @@ import threading
 from contextlib import suppress
 
 import rumps
+from PyObjCTools import AppHelper
 
 from . import autostart
 from .doctor import check_accessibility, check_microphone
@@ -83,12 +84,11 @@ class DictateMenuBar(rumps.App):
         with suppress(Exception):
             autostart.migrate_legacy()
         self._refresh_login_item()
-        self._timer = rumps.Timer(self._refresh_status, 0.25)
-        self._timer.start()
 
     def set_status(self, status: str) -> None:
         with self._status_lock:
             self._status = status
+        AppHelper.callAfter(self._refresh_status, None)
 
     def run(self, **options: object) -> None:
         if hasattr(self.service, "set_status_callback"):
@@ -181,7 +181,7 @@ class DictateMenuBar(rumps.App):
         except Exception as exc:
             rumps.alert(title="Vox Terminal", message=f"Could not save settings: {exc}")
             return
-        if not ok:
+        if not ok and getattr(self.service, "status", "error") != "model_missing":
             self.set_status("error")
 
     def _show_diagnostics(self, _sender: rumps.MenuItem) -> None:
