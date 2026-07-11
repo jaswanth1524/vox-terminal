@@ -43,7 +43,9 @@ make install
 `make setup` validates macOS and arm64, then synchronizes a Python 3.11 environment
 from the exact `uv.lock` in frozen mode. `make verify` runs lint, tests, a production build,
 the frozen-app self-test, architecture and signature checks, and the 300 MB bundle
-limit. `make install` copies the ad-hoc-signed app to `~/Applications`.
+limit. `make install` copies the ad-hoc-signed app to your personal Applications
+folder at `~/Applications`, not the system-wide `/Applications` folder. Run
+`open -R "$HOME/Applications/Vox Terminal.app"` to reveal it in Finder.
 
 The lock intentionally omits Torch, SciPy, Numba, Librosa, and scikit-learn.
 The pinned speech engines declare those optional stacks unconditionally, while Vox
@@ -68,7 +70,22 @@ Open System Settings -> Privacy & Security and grant:
 2. Accessibility: required to synthesize Cmd+V.
 3. Input Monitoring: required for the global Right Option hotkey.
 
-If the hotkey listener sees no keyboard events shortly after startup, Vox Terminal prints an Input Monitoring warning. Secure input fields, such as password prompts, may block synthetic paste events.
+If the hotkey listener sees no keyboard events shortly after startup, Vox Terminal
+prints an Input Monitoring warning. Grant permissions to the exact installed app at
+`~/Applications/Vox Terminal.app`; grant Terminal and virtual-environment Python
+only when running the developer CLI. Secure input fields, such as password prompts,
+may block synthetic paste events.
+
+Replacing an ad-hoc-signed local build can change its macOS code identity and leave
+privacy toggles looking enabled while no longer matching the executable. Quit the
+app, remove and re-add the exact installed bundle under Accessibility and Input
+Monitoring, then relaunch it. If macOS retains stale entries, reset only this app:
+
+```sh
+tccutil reset Accessibility com.jaswanth.voxterminal
+tccutil reset ListenEvent com.jaswanth.voxterminal
+tccutil reset Microphone com.jaswanth.voxterminal
+```
 
 ## Usage
 

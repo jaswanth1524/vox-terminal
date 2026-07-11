@@ -15,6 +15,7 @@ from .network import install_runtime_network_policy, is_provisioning_process
 install_runtime_network_policy()
 
 from .config import AppConfig, load_config  # noqa: E402
+from .doctor import permission_target_description  # noqa: E402
 from .engines import TranscriptionEngine, build_engine  # noqa: E402
 from .history import TranscriptHistory  # noqa: E402
 from .hotkey import HotkeyCallbacks, RightOptionHoldListener  # noqa: E402
@@ -522,7 +523,8 @@ class DictateService:
     def _warn_input_monitoring(self) -> None:
         logging.warning(
             "No keyboard events observed. If Right Option does not work, grant "
-            "Input Monitoring to the launching terminal app and venv Python."
+            "Input Monitoring to %s.",
+            permission_target_description(),
         )
 
     def _set_status(self, status: str) -> None:

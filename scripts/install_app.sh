@@ -15,5 +15,6 @@ rm -rf "$DESTINATION"
 ditto "$SOURCE" "$DESTINATION"
 codesign --force --deep --sign - "$DESTINATION"
 
-echo "Installed: $DESTINATION"
+echo "Installed in your personal Applications folder: $DESTINATION"
+echo "Reveal it in Finder: open -R '$DESTINATION'"
 echo "Launch it from Finder or run: open '$DESTINATION'"
