@@ -10,12 +10,13 @@ from pathlib import Path
 
 import numpy as np
 
-from dictate.config import load_config
+from dictate.config import DEFAULT_PARAKEET_BEAM_SIZE, load_config
 from dictate.engines import ParakeetEngine
 from dictate.latency_benchmark import (
     BenchmarkCase,
     EngineBenchmark,
     benchmark_engine,
+    meets_fast_default_gate,
     should_promote_parakeet,
 )
 from dictate.recorder import Recorder
@@ -49,7 +50,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Compare local dictation latency and accuracy")
     parser.add_argument("--voice", default="Samantha")
     parser.add_argument("--rate", type=int, default=190)
-    parser.add_argument("--parakeet-beam-size", type=int, default=1)
+    parser.add_argument(
+        "--parakeet-beam-size",
+        type=int,
+        default=DEFAULT_PARAKEET_BEAM_SIZE,
+    )
     parser.add_argument("--parakeet-only", action="store_true")
     parser.add_argument(
         "--interactive",
@@ -83,15 +88,18 @@ def main() -> int:
                 model=config.parakeet_model,
                 offline=True,
                 beam_size=args.parakeet_beam_size,
+                quantization_bits=config.parakeet_quantization_bits or None,
             ),
             cases,
         )
 
-    promote = whisper is not None and should_promote_parakeet(whisper, parakeet)
+    fast_default = whisper is not None and meets_fast_default_gate(whisper, parakeet)
+    accuracy_parity = whisper is not None and should_promote_parakeet(whisper, parakeet)
     payload = {"parakeet": _result_dict(parakeet)}
     if whisper is not None:
         payload["whisper"] = _result_dict(whisper)
-        payload["promote_parakeet"] = promote
+        payload["fast_default_gate"] = fast_default
+        payload["whisper_accuracy_parity"] = accuracy_parity
     if args.json:
         print(json.dumps(payload, indent=2))
     else:
@@ -104,10 +112,11 @@ def main() -> int:
                 f"WER={result['word_error_rate']:.1%}"
             )
         if whisper is not None:
-            print(f"promotion gate: {'PASS' if promote else 'FAIL'}")
+            print(f"fast default gate: {'PASS' if fast_default else 'FAIL'}")
+            print(f"Whisper accuracy parity: {'PASS' if accuracy_parity else 'FAIL'}")
     if whisper is None:
         return 0
-    return 0 if promote else 1
+    return 0 if accuracy_parity else 1
 
 
 def _synthesize_cases(directory: Path, *, voice: str, rate: int) -> list[BenchmarkCase]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import os
 import sys
 from collections.abc import Callable, Mapping
@@ -10,6 +11,7 @@ from typing import Any
 import numpy as np
 
 from .config import DEFAULT_MODEL
+from .lightweight_imports import install_whisper_timing_shims
 
 TranscribeImpl = Callable[..., Mapping[str, Any]]
 
@@ -20,6 +22,9 @@ class ModelUnavailableError(RuntimeError):
 
 def configure_offline_mode(*, offline: bool = True) -> None:
     if offline:
+        from .network import install_offline_guard
+
+        install_offline_guard()
         os.environ["HF_HUB_OFFLINE"] = "1"
         os.environ["TRANSFORMERS_OFFLINE"] = "1"
         os.environ["HF_DATASETS_OFFLINE"] = "1"
@@ -36,6 +41,7 @@ def configure_offline_mode(*, offline: bool = True) -> None:
 
 
 def _default_transcribe_impl(audio: str | np.ndarray, **kwargs: Any) -> Mapping[str, Any]:
+    install_whisper_timing_shims()
     import mlx_whisper
 
     return mlx_whisper.transcribe(audio, **kwargs)
@@ -63,10 +69,14 @@ class Transcriber:
             self._call_backend(silent_warmup)
         except Exception as exc:
             if self.offline:
-                raise ModelUnavailableError(
-                    "Model is not available in the local cache. Run "
-                    "`./scripts/install.sh` once while online, then retry offline."
-                ) from exc
+                from .model_manager import resolve_cached_model
+
+                if resolve_cached_model(self.model) is None:
+                    raise ModelUnavailableError(
+                        "Model is not available in the local cache. Use the app's "
+                        "Download Model prompt, or select it in the configuration and run "
+                        "`uv run python -m dictate --download-model`."
+                    ) from exc
             raise
         self._loaded = True
 
@@ -75,6 +85,21 @@ class Transcriber:
         result = self._call_backend(audio)
         text = result.get("text", "")
         return str(text)
+
+    def close(self) -> None:
+        self._loaded = False
+        if self.transcribe_impl is not _default_transcribe_impl:
+            return
+        try:
+            import mlx.core as mx
+            from mlx_whisper.transcribe import ModelHolder
+
+            ModelHolder.model = None
+            ModelHolder.model_path = None
+            gc.collect()
+            mx.clear_cache()
+        except (ImportError, RuntimeError):
+            pass
 
     def _call_backend(self, audio: str | np.ndarray) -> Mapping[str, Any]:
         return self.transcribe_impl(
@@ -89,8 +114,9 @@ class Transcriber:
 
 
 def download_model(model: str = DEFAULT_MODEL, language: str = "en") -> None:
-    transcriber = Transcriber(model=model, language=language, offline=False)
-    transcriber.load()
+    from .model_manager import ModelManager
+
+    ModelManager("whisper", model, language).download()
 
 
 def main() -> int:

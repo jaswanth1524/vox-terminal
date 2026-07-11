@@ -1,17 +1,21 @@
 from pathlib import Path
 import os
+import tomllib
 
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, copy_metadata
 
 
 ROOT = Path(SPECPATH)
+with (ROOT / "pyproject.toml").open("rb") as project_file:
+    APP_VERSION = tomllib.load(project_file)["project"]["version"]
+
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
-datas = []
+datas = copy_metadata("vox-terminal")
 binaries = []
 hiddenimports = []
-for package in ("mlx", "mlx_whisper", "parakeet_mlx", "silero_vad"):
+for package in ("mlx", "mlx_whisper", "parakeet_mlx"):
     package_datas, package_binaries, package_hidden = collect_all(package)
     datas.extend(package_datas)
     binaries.extend(package_binaries)
@@ -25,10 +29,15 @@ analysis = Analysis(
     datas=datas,
     hiddenimports=hiddenimports,
     excludes=[
-        "torch.cuda",
-        "torch.distributed",
-        "torch.testing",
-        "torch.utils.tensorboard",
+        "librosa",
+        "llvmlite",
+        "numba",
+        "scipy",
+        "silero_vad",
+        "sklearn",
+        "torch",
+        "torchaudio",
+        "torchgen",
     ],
     noarchive=False,
 )
@@ -61,8 +70,8 @@ app = BUNDLE(
     bundle_identifier="com.jaswanth.voxterminal",
     info_plist={
         "CFBundleDisplayName": "Vox Terminal",
-        "CFBundleShortVersionString": "0.2.0",
-        "CFBundleVersion": "1",
+        "CFBundleShortVersionString": APP_VERSION,
+        "CFBundleVersion": APP_VERSION,
         "LSMinimumSystemVersion": "13.0",
         "LSUIElement": True,
         "NSHighResolutionCapable": True,

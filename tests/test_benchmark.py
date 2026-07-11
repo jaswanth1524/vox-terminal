@@ -3,8 +3,9 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
-from dictate.benchmark import benchmark_parakeet, benchmark_whisper
+from dictate.benchmark import _load_parakeet, benchmark_parakeet, benchmark_whisper
 
 
 class FakeClock:
@@ -80,6 +81,24 @@ class BenchmarkTests(unittest.TestCase):
 
         self.assertEqual(result.to_dict()["load_seconds"], 0.1235)
         self.assertEqual(result.to_dict()["transcribe_seconds"], 0.8642)
+
+    @mock.patch("dictate.benchmark.install_parakeet_librosa_shim")
+    def test_default_loader_installs_lightweight_mel_shim_first(
+        self,
+        install_shim: mock.Mock,
+    ) -> None:
+        state = {"shim_installed": False}
+        install_shim.side_effect = lambda: state.update(shim_installed=True)
+
+        def from_pretrained(model: str) -> object:
+            self.assertTrue(state["shim_installed"])
+            return f"loaded:{model}"
+
+        fake_module = SimpleNamespace(from_pretrained=from_pretrained)
+        with mock.patch.dict("sys.modules", {"parakeet_mlx": fake_module}):
+            loaded = _load_parakeet("example/parakeet")
+
+        self.assertEqual(loaded, "loaded:example/parakeet")
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ from dictate.recorder import Recording
 class FakeRecorder:
     def __init__(self, duration: float = 0.1) -> None:
         self.duration = duration
+        self.sample_rate = 16_000
         self.is_recording = False
         self.starts = 0
         self.stops = 0
@@ -42,6 +43,9 @@ class FakeRecorder:
             started_at=now - 1,
             stopped_at=now,
         )
+
+    def read_new_audio(self) -> np.ndarray:
+        return np.ones(16_000, dtype=np.float32)
 
 
 class FakeTranscriber:
@@ -71,7 +75,10 @@ class FakeVadAutoStop:
         self.should_stop = should_stop
         self.calls = 0
 
-    def decide(self, audio: np.ndarray, *, sample_rate: int) -> object:
+    def reset(self) -> None:
+        pass
+
+    def process(self, audio: np.ndarray, *, sample_rate: int) -> object:
         del audio, sample_rate
         self.calls += 1
         return SimpleNamespace(

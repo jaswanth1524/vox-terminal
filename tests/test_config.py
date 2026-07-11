@@ -51,9 +51,11 @@ class ConfigTests(unittest.TestCase):
     def test_example_includes_phase_2_controls(self) -> None:
         example = as_toml_example(AppConfig())
         self.assertIn('mode = "hold"', example)
-        self.assertIn('engine = "whisper"', example)
+        self.assertIn('engine = "parakeet"', example)
         self.assertIn('paste_mode = "clipboard"', example)
         self.assertIn('parakeet_model = "mlx-community/parakeet-tdt-0.6b-v2"', example)
+        self.assertIn("parakeet_beam_size = 2", example)
+        self.assertIn("parakeet_quantization_bits = 3", example)
         self.assertIn("max_recording_seconds = 120", example)
         self.assertIn("history_size = 20", example)
         self.assertIn("vad_auto_stop = true", example)
@@ -81,6 +83,22 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(config.custom_vocabulary, ("Claude Code", "FastAPI"))
 
+    def test_new_install_defaults_to_fast_english_engine(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = load_config(Path(tmp) / "missing.toml")
+
+        self.assertEqual(config.engine, "parakeet")
+        self.assertEqual(config.parakeet_beam_size, 2)
+
+    def test_explicit_whisper_configuration_is_preserved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.toml"
+            path.write_text('engine = "whisper"', encoding="utf-8")
+
+            config = load_config(path)
+
+        self.assertEqual(config.engine, "whisper")
+
     def test_rejects_non_list_custom_vocabulary(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "config.toml"
@@ -93,6 +111,13 @@ class ConfigTests(unittest.TestCase):
             path = Path(tmp) / "config.toml"
             path.write_text("vad_silence_seconds = 0", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "vad_silence_seconds"):
+                load_config(path)
+
+    def test_rejects_invalid_parakeet_quantization(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.toml"
+            path.write_text("parakeet_quantization_bits = 2", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "parakeet_quantization_bits"):
                 load_config(path)
 
 
