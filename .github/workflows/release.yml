@@ -26,6 +26,9 @@ jobs:
           version: "0.8.11"
           enable-cache: true
 
+      - name: Install native build tools
+        run: brew install librsvg
+
       - name: Synchronize locked environment
         run: make setup
 
