@@ -176,6 +176,38 @@ class ControllerTests(unittest.TestCase):
             controller.clear_performance_data()
             self.assertEqual(services[0].performance_clears, 1)
 
+    def test_cache_check_failure_becomes_recoverable_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            controller = AppController(
+                config_path=Path(temp_dir) / "config.toml",
+                model_manager_factory=lambda *_args: (_ for _ in ()).throw(
+                    RuntimeError("cache index corrupt")
+                ),
+            )
+
+            with self.assertLogs(level="ERROR"):
+                self.assertFalse(controller.start())
+
+        self.assertEqual(controller.status, "error")
+        self.assertIn("cache index corrupt", controller.last_error or "")
+
+    def test_service_factory_failure_becomes_recoverable_error(self) -> None:
+        manager = FakeModelManager(True, lambda _state: None)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            controller = AppController(
+                config_path=Path(temp_dir) / "config.toml",
+                service_factory=lambda _config: (_ for _ in ()).throw(
+                    RuntimeError("engine construction failed")
+                ),
+                model_manager_factory=lambda *_args: manager,
+            )
+
+            with self.assertLogs(level="ERROR"):
+                self.assertFalse(controller.start())
+
+        self.assertEqual(controller.status, "error")
+        self.assertIn("engine construction failed", controller.last_error or "")
+
 
 if __name__ == "__main__":
     unittest.main()

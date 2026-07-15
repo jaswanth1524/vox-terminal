@@ -173,7 +173,12 @@ def main() -> int:
     except Exception as exc:
         logging.error("Configuration error: %s", exc)
         return 2
-    DictateMenuBar(controller).run()
+    try:
+        DictateMenuBar(controller).run()
+    except Exception as exc:
+        logging.exception("Menu-bar event loop failed: %s", exc)
+        controller.stop()
+        return 1
     return 0
 
 
@@ -282,15 +287,24 @@ class DictateService:
         self._cancel_max_timer()
         self._stop_vad_monitor()
         if self._listener is not None:
-            self._listener.stop()
+            try:
+                self._listener.stop()
+            except Exception as exc:
+                logging.warning("Could not stop hotkey listener: %s", exc)
             self._listener = None
         with self._recording_lock:
             if self.recorder.is_recording:
-                self.recorder.stop()
+                try:
+                    self.recorder.stop()
+                except Exception as exc:
+                    logging.warning("Could not stop active recording: %s", exc)
         with self._transcribing:
             close = getattr(self.transcriber, "close", None)
             if close is not None:
-                close()
+                try:
+                    close()
+                except Exception as exc:
+                    logging.warning("Could not close transcription engine: %s", exc)
         self._set_status("stopped")
 
     def history_text(self) -> str:
@@ -359,6 +373,7 @@ class DictateService:
                 recording = self.recorder.stop()
             except Exception as exc:
                 logging.exception("Could not stop recording: %s", exc)
+                self.last_error = f"Could not stop recording: {exc}"
                 self._set_status("error")
                 return
             finally:
@@ -530,7 +545,12 @@ class DictateService:
     def _set_status(self, status: str) -> None:
         self._status = status
         if self._status_callback is not None:
-            self._status_callback(status)
+            try:
+                self._status_callback(status)
+            except Exception:
+                # Status rendering must never terminate a hotkey, VAD, or
+                # transcription worker.
+                logging.exception("Status callback failed for state %s", status)
 
 
 if __name__ == "__main__":

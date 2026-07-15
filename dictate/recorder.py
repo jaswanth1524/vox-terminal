@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from dataclasses import dataclass
@@ -97,13 +98,17 @@ class Recorder:
         stopped_at = time.monotonic()
         if stream is not None:
             try:
-                stream.stop()
+                # PortAudio's graceful stop waits for pending callbacks. That can
+                # leave a menu-bar app looking frozen when a device disappears or
+                # a callback stalls. Captured input is already in our own buffer,
+                # so aborting is both lossless for Vox Terminal and bounded.
+                stream.abort()
             except Exception as exc:
-                print(f"audio stop warning: {exc}", flush=True)
+                logging.warning("Could not abort audio input: %s", exc)
             try:
                 stream.close()
             except Exception as exc:
-                print(f"audio close warning: {exc}", flush=True)
+                logging.warning("Could not close audio input: %s", exc)
 
         with self._lock:
             audio = self._buffer[: self._sample_count].copy()
@@ -157,7 +162,7 @@ class Recorder:
     ) -> None:
         del frames, time_info
         if status:
-            print(f"audio capture warning: {status}", flush=True)
+            logging.warning("Audio capture warning: %s", status)
 
         chunk = np.asarray(indata[:, 0], dtype=np.float32)
         with self._lock:

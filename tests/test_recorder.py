@@ -82,6 +82,8 @@ class RecorderTests(unittest.TestCase):
             recorder.read_new_audio(),
             np.full(2, 2.0, dtype=np.float32),
         )
+        stream.abort.assert_called_once_with()
+        stream.stop.assert_not_called()
         stream.start.assert_called()
 
 
