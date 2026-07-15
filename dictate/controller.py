@@ -86,8 +86,13 @@ class AppController:
 
         with self._lifecycle_lock:
             self.last_error = None
-            manager = self._model_manager()
-            if not manager.is_available():
+            try:
+                manager = self._model_manager()
+                available = manager.is_available()
+            except Exception as exc:
+                self._fail("Could not check the speech model", exc)
+                return False
+            if not available:
                 return False
             return self._start_service()
 
@@ -155,21 +160,29 @@ class AppController:
 
     def _start_service(self) -> bool:
         self._stop_service()
-        service = self.service_factory(self.config)
-        service.set_status_callback(self._set_status)
-        self._service = service
-        if service.start():
-            return True
+        try:
+            service = self.service_factory(self.config)
+            service.set_status_callback(self._set_status)
+            self._service = service
+            if service.start():
+                return True
+        except Exception as exc:
+            self._fail("Vox Terminal could not start", exc)
+            self._stop_service()
+            return False
         self.last_error = getattr(service, "last_error", None) or "Vox Terminal could not start."
-        service.stop()
-        self._service = None
+        self._stop_service()
         self._set_status("error")
         return False
 
     def _stop_service(self) -> None:
-        if self._service is not None:
-            self._service.stop()
-            self._service = None
+        service = self._service
+        self._service = None
+        if service is not None:
+            try:
+                service.stop()
+            except Exception as exc:
+                logging.exception("Service cleanup failed: %s", exc)
 
     def _set_model_state(self, state: ModelState) -> None:
         if state == ModelState.READY:
@@ -179,4 +192,12 @@ class AppController:
     def _set_status(self, status: str) -> None:
         self._status = status
         if self._status_callback is not None:
-            self._status_callback(status)
+            try:
+                self._status_callback(status)
+            except Exception:
+                logging.exception("Controller status callback failed for state %s", status)
+
+    def _fail(self, context: str, exception: Exception) -> None:
+        self.last_error = f"{context}: {exception}"
+        logging.exception(self.last_error)
+        self._set_status("error")

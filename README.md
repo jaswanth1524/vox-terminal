@@ -200,6 +200,7 @@ Common commands:
 make setup       # validate the Mac and synchronize uv.lock
 make lint        # run Ruff
 make test        # run deterministic unit tests
+make crash-check # repeat fault-injected crash-boundary tests
 make benchmark   # compare cached Whisper and Parakeet models offline
 make performance # audit latency, memory growth, and bundle size
 make app         # build and ad-hoc sign dist/Vox Terminal.app

@@ -1,6 +1,6 @@
 PERFORMANCE_ITERATIONS ?= 100
 
-.PHONY: setup lint test benchmark performance icon app install release-check verify release clean
+.PHONY: setup lint test crash-check benchmark performance icon app install release-check verify release clean
 
 setup:
 	sh scripts/bootstrap.sh
@@ -10,6 +10,9 @@ lint:
 
 test:
 	uv run --frozen python -m unittest discover -s tests
+
+crash-check:
+	uv run --frozen python scripts/crash_feedback.py
 
 benchmark:
 	uv run --frozen python scripts/benchmark_latency.py

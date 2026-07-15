@@ -61,6 +61,9 @@ class FakeTranscriber:
         self.calls += 1
         return "hello"
 
+    def close(self) -> None:
+        pass
+
 
 class FakeInjector:
     def __init__(self) -> None:
@@ -203,6 +206,49 @@ class ServiceTests(unittest.TestCase):
 
         self.assertEqual(recorder.stops, 1)
         self.assertGreaterEqual(fake_vad.calls, 1)
+
+    def test_status_callback_failure_does_not_escape_worker_boundary(self) -> None:
+        service = DictateService(
+            AppConfig(sounds=False),
+            transcriber=FakeTranscriber(),  # type: ignore[arg-type]
+            injector=FakeInjector(),
+        )
+        service._status_callback = lambda _status: (_ for _ in ()).throw(
+            RuntimeError("render failed")
+        )
+
+        with self.assertLogs(level="ERROR") as captured:
+            service._set_status("recording")
+
+        self.assertEqual(service.status, "recording")
+        self.assertIn("render failed", "\n".join(captured.output))
+
+    def test_stop_contains_native_cleanup_failures(self) -> None:
+        class FailingRecorder(FakeRecorder):
+            def stop(self) -> Recording:
+                self.is_recording = False
+                raise RuntimeError("audio device vanished")
+
+        class FailingTranscriber(FakeTranscriber):
+            def close(self) -> None:
+                raise RuntimeError("model close failed")
+
+        recorder = FailingRecorder()
+        recorder.is_recording = True
+        service = DictateService(
+            AppConfig(sounds=False),
+            recorder=recorder,  # type: ignore[arg-type]
+            transcriber=FailingTranscriber(),  # type: ignore[arg-type]
+            injector=FakeInjector(),
+        )
+
+        with self.assertLogs(level="WARNING") as captured:
+            service.stop()
+
+        self.assertEqual(service.status, "stopped")
+        messages = "\n".join(captured.output)
+        self.assertIn("audio device vanished", messages)
+        self.assertIn("model close failed", messages)
 
 
 if __name__ == "__main__":
